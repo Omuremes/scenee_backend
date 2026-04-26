@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.security import get_current_admin_user
 from app.main import app
 from app.routers import movies as movies_router_module
-from app.services.movie import MovieCategoryService, MovieService
+from app.services.movie import MovieService
 
 
 def _build_movie(movie_id=None):
@@ -128,7 +128,7 @@ async def test_public_movies_uses_cached_payload(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_movie_routes_support_list_detail_category_and_delete(monkeypatch):
+async def test_admin_movie_routes_support_list_detail_and_delete(monkeypatch):
     movie = _build_movie()
 
     async def fake_get_db():
@@ -143,9 +143,6 @@ async def test_admin_movie_routes_support_list_detail_category_and_delete(monkey
     async def fake_get_movie_with_details(self, movie_id):
         return movie if movie_id == movie.id else None
 
-    async def fake_create_category(self, category_data):
-        return SimpleNamespace(id=uuid4(), name=category_data.name, slug="drama")
-
     async def fake_delete(self, movie_id):
         return movie_id == movie.id
 
@@ -155,7 +152,6 @@ async def test_admin_movie_routes_support_list_detail_category_and_delete(monkey
     monkeypatch.setattr(MovieService, "list_movies", fake_list_movies)
     monkeypatch.setattr(MovieService, "get_movie_with_details", fake_get_movie_with_details)
     monkeypatch.setattr(MovieService, "delete", fake_delete)
-    monkeypatch.setattr(MovieCategoryService, "create_category", fake_create_category)
     monkeypatch.setattr(movies_router_module, "_invalidate_public_movie_cache", fake_invalidate_cache)
     app.dependency_overrides[get_db] = fake_get_db
     app.dependency_overrides[get_current_admin_user] = fake_admin_user
@@ -164,15 +160,12 @@ async def test_admin_movie_routes_support_list_detail_category_and_delete(monkey
         async with AsyncClient(app=app, base_url="http://testserver") as client:
             list_response = await client.get("/v1/admin/movies/")
             detail_response = await client.get(f"/v1/admin/movies/{movie.id}")
-            category_response = await client.post("/v1/admin/movies/categories", json={"name": "Drama"})
             delete_response = await client.delete(f"/v1/admin/movies/{movie.id}")
 
         assert list_response.status_code == 200
         assert list_response.json()["total"] == 1
         assert detail_response.status_code == 200
         assert detail_response.json()["id"] == str(movie.id)
-        assert category_response.status_code == 201
-        assert category_response.json()["slug"] == "drama"
         assert delete_response.status_code == 204
     finally:
         app.dependency_overrides.clear()

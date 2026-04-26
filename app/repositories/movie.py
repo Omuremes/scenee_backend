@@ -223,6 +223,28 @@ class MovieCategoryRepository(BaseRepository[MovieCategory]):
     def __init__(self, db: AsyncSession):
         super().__init__(MovieCategory, db)
 
+    def _apply_query(self, stmt, query: Optional[str]):
+        normalized_query = query.strip() if query else None
+        if not normalized_query:
+            return stmt
+
+        search_document = func.concat_ws(
+            " ",
+            func.coalesce(MovieCategory.name, ""),
+            func.coalesce(MovieCategory.slug, ""),
+        )
+        search_vector = func.to_tsvector("simple", search_document)
+        search_query = func.websearch_to_tsquery("simple", normalized_query)
+        ilike_query = f"%{normalized_query}%"
+
+        return stmt.where(
+            or_(
+                search_vector.op("@@")(search_query),
+                MovieCategory.name.ilike(ilike_query),
+                MovieCategory.slug.ilike(ilike_query),
+            )
+        )
+
     async def get_by_slug(self, slug: str) -> Optional[MovieCategory]:
         result = await self.db.execute(select(MovieCategory).where(MovieCategory.slug == slug))
         return result.scalar_one_or_none()
@@ -237,6 +259,23 @@ class MovieCategoryRepository(BaseRepository[MovieCategory]):
             return []
         result = await self.db.execute(select(MovieCategory).where(MovieCategory.id.in_(category_ids)))
         return result.scalars().all()
+
+    async def list_categories(
+        self,
+        query: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> List[MovieCategory]:
+        stmt = select(MovieCategory).order_by(MovieCategory.name.asc(), MovieCategory.id.asc())
+        stmt = self._apply_query(stmt, query)
+        result = await self.db.execute(stmt.offset(skip).limit(limit))
+        return result.scalars().all()
+
+    async def count_categories(self, query: Optional[str] = None) -> int:
+        stmt = select(func.count(MovieCategory.id))
+        stmt = self._apply_query(stmt, query)
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one())
 
     async def touch_primary_category(self, movie_id: UUID, category_id: Optional[UUID]) -> None:
         await self.db.execute(update(Movie).where(Movie.id == movie_id).values(category_id=category_id))

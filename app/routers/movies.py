@@ -18,15 +18,13 @@ from app.core.security import get_current_admin_user
 from app.models import User
 from app.schemas import (
     EpisodeResponse,
-    MovieCategoryCreate,
-    MovieCategoryResponse,
     MovieCreate,
     MovieListResponse,
     MoviePageResponse,
     MovieResponse,
     MovieUpdate,
 )
-from app.services import MovieCategoryService, MovieService
+from app.services import MovieService
 
 PUBLIC_MOVIE_CACHE_PREFIX = "movies:public:"
 PUBLIC_MOVIE_LIST_TTL_SECONDS = 300
@@ -36,6 +34,79 @@ PUBLIC_MOVIE_NEW_TTL_SECONDS = 300
 
 public_router = APIRouter(prefix="/v1/movies", tags=["movies"])
 admin_router = APIRouter(prefix="/v1/admin/movies", tags=["admin-movies"])
+
+
+def _model_openapi_schema(schema_type) -> dict:
+    if hasattr(schema_type, "model_json_schema"):
+        return schema_type.model_json_schema()
+    return schema_type.schema()
+
+
+def _movie_multipart_openapi_schema(partial: bool = False) -> dict:
+    schema = {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "maxLength": 255},
+            "description": {"type": "string"},
+            "is_series": {"type": "boolean", "default": False},
+            "duration": {"type": "integer", "minimum": 1, "description": "Movie duration in minutes"},
+            "seasons_count": {"type": "integer", "minimum": 1, "default": 1},
+            "actors": {
+                "type": "array",
+                "items": {"type": "string", "format": "uuid"},
+                "description": "Repeat the field or send an array of actor UUIDs",
+            },
+            "categories": {
+                "type": "array",
+                "items": {"type": "string", "format": "uuid"},
+                "description": "Repeat the field or send an array of category UUIDs",
+            },
+            "episodes": {
+                "type": "string",
+                "description": "JSON array of episodes for multipart requests",
+                "example": '[{"season_number":1,"episode_number":1,"title":"Pilot","duration":42}]',
+            },
+            "poster": {
+                "oneOf": [
+                    {"type": "string", "format": "binary"},
+                    {"type": "string", "format": "uri"},
+                ],
+                "description": "Upload a file or provide a poster URL",
+            },
+        },
+    }
+    if not partial:
+        schema["required"] = ["name"]
+    return schema
+
+
+MOVIE_CREATE_OPENAPI = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": _model_openapi_schema(MovieCreate),
+            },
+            "multipart/form-data": {
+                "schema": _movie_multipart_openapi_schema(partial=False),
+            },
+        },
+    }
+}
+
+MOVIE_UPDATE_OPENAPI = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": _model_openapi_schema(MovieUpdate),
+            },
+            "multipart/form-data": {
+                "schema": _movie_multipart_openapi_schema(partial=True),
+            },
+        },
+    }
+}
 
 
 def _normalize_query(query: Optional[str], alias_query: Optional[str]) -> Optional[str]:
@@ -321,22 +392,6 @@ async def admin_get_movies(
     )
 
 
-@admin_router.post("/categories", response_model=MovieCategoryResponse, status_code=status.HTTP_201_CREATED)
-async def create_movie_category(
-    category_data: MovieCategoryCreate,
-    _current_admin: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    category_service = MovieCategoryService(db)
-    try:
-        category = await category_service.create_category(category_data)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    await _invalidate_public_movie_cache()
-    return MovieCategoryResponse.model_validate(category)
-
-
 @admin_router.get("/{movie_id}", response_model=MovieResponse)
 async def admin_get_movie(
     movie_id: UUID,
@@ -350,7 +405,12 @@ async def admin_get_movie(
     return MovieResponse.model_validate(movie)
 
 
-@admin_router.post("/", response_model=MovieResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post(
+    "/",
+    response_model=MovieResponse,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra=MOVIE_CREATE_OPENAPI,
+)
 async def create_movie(
     request: Request,
     _current_admin: User = Depends(get_current_admin_user),
@@ -367,7 +427,11 @@ async def create_movie(
     return MovieResponse.model_validate(movie)
 
 
-@admin_router.patch("/{movie_id}", response_model=MovieResponse)
+@admin_router.patch(
+    "/{movie_id}",
+    response_model=MovieResponse,
+    openapi_extra=MOVIE_UPDATE_OPENAPI,
+)
 async def update_movie(
     movie_id: UUID,
     request: Request,

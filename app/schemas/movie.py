@@ -17,8 +17,21 @@ class MovieCategoryCreate(BaseSchema):
     slug: Optional[str] = Field(None, max_length=100)
 
 
+class MovieCategoryUpdate(BaseSchema):
+    name: Optional[str] = Field(None, max_length=100)
+    slug: Optional[str] = Field(None, max_length=100)
+
+
 class MovieCategoryResponse(MovieCategoryBase):
     id: UUID
+
+
+class MovieCategoryPageResponse(BaseSchema):
+    items: List[MovieCategoryResponse] = Field(default_factory=list)
+    total: int
+    offset: int
+    limit: int
+    has_more: bool
 
 
 class ActorBase(BaseSchema):

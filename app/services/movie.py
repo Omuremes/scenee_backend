@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories import ActorRepository, MovieCategoryRepository, MovieRepository
-from app.schemas import EpisodeCreate, MovieCategoryCreate, MovieCreate, MovieUpdate
+from app.schemas import EpisodeCreate, MovieCategoryCreate, MovieCategoryUpdate, MovieCreate, MovieUpdate
 from app.services.base import BaseService
 
 
@@ -255,3 +255,47 @@ class MovieCategoryService(BaseService[MovieCategoryRepository]):
             raise ValueError("Movie category with this slug already exists")
 
         return await self.repository.create({"name": normalized_name, "slug": normalized_slug})
+
+    async def list_categories(
+        self,
+        query: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ):
+        items = await self.repository.list_categories(query=query, skip=skip, limit=limit)
+        total = await self.repository.count_categories(query=query)
+        return items, total
+
+    async def update_category(self, category_id: UUID, category_data: MovieCategoryUpdate):
+        current_category = await self.repository.get_by_id(category_id)
+        if not current_category:
+            return None
+
+        payload = category_data.model_dump(exclude_unset=True)
+        if not payload:
+            return current_category
+
+        normalized_name = current_category.name
+        normalized_slug = current_category.slug
+
+        if "name" in payload:
+            normalized_name = payload["name"].strip()
+            if not normalized_name:
+                raise ValueError("Category name is required")
+            existing_name = await self.repository.get_by_name(normalized_name)
+            if existing_name and existing_name.id != category_id:
+                raise ValueError("Movie category with this name already exists")
+
+        if "slug" in payload or "name" in payload:
+            normalized_slug = self._normalize_slug(normalized_name, payload.get("slug", normalized_slug))
+            existing_slug = await self.repository.get_by_slug(normalized_slug)
+            if existing_slug and existing_slug.id != category_id:
+                raise ValueError("Movie category with this slug already exists")
+
+        return await self.repository.update(
+            category_id,
+            {
+                "name": normalized_name,
+                "slug": normalized_slug,
+            },
+        )
