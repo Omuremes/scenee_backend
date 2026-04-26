@@ -1,9 +1,11 @@
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
-from sqlalchemy import select, and_, or_
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
 from app.models import Event, Venue
 from app.repositories.base import BaseRepository
 
@@ -17,7 +19,7 @@ class EventRepository(BaseRepository[Event]):
             select(Event)
             .options(
                 selectinload(Event.venue),
-                selectinload(Event.reviews)
+                selectinload(Event.reviews),
             )
             .where(Event.id == event_id)
         )
@@ -28,14 +30,12 @@ class EventRepository(BaseRepository[Event]):
         city: Optional[str] = None,
         event_type: Optional[str] = None,
         skip: int = 0,
-        limit: int = 20
+        limit: int = 20,
     ) -> List[Event]:
-        stmt = select(Event).options(
-            selectinload(Event.venue)
-        ).where(
+        stmt = select(Event).options(selectinload(Event.venue)).where(
             and_(
                 Event.start_datetime > datetime.utcnow(),
-                Event.is_active == True
+                Event.is_active.is_(True),
             )
         )
 
@@ -44,15 +44,28 @@ class EventRepository(BaseRepository[Event]):
         if event_type:
             stmt = stmt.where(Event.event_type == event_type)
 
-        stmt = stmt.order_by(Event.start_datetime).offset(skip).limit(limit)
-        result = await self.db.execute(stmt)
+        result = await self.db.execute(
+            stmt.order_by(Event.start_datetime, Event.id.desc()).offset(skip).limit(limit)
+        )
         return result.scalars().all()
 
     async def get_events_by_venue(self, venue_id: UUID) -> List[Event]:
+        result = await self.db.execute(select(Event).where(Event.venue_id == venue_id))
+        return result.scalars().all()
+
+    async def list_events(self, skip: int = 0, limit: int = 20) -> List[Event]:
         result = await self.db.execute(
-            select(Event).where(Event.venue_id == venue_id)
+            select(Event)
+            .options(selectinload(Event.venue))
+            .order_by(Event.start_datetime.desc(), Event.id.desc())
+            .offset(skip)
+            .limit(limit)
         )
         return result.scalars().all()
+
+    async def count_events(self) -> int:
+        result = await self.db.execute(select(func.count(Event.id)))
+        return int(result.scalar_one())
 
 
 class VenueRepository(BaseRepository[Venue]):
@@ -60,7 +73,5 @@ class VenueRepository(BaseRepository[Venue]):
         super().__init__(Venue, db)
 
     async def get_by_city(self, city: str) -> List[Venue]:
-        result = await self.db.execute(
-            select(Venue).where(Venue.city.ilike(f"%{city}%"))
-        )
+        result = await self.db.execute(select(Venue).where(Venue.city.ilike(f"%{city}%")))
         return result.scalars().all()

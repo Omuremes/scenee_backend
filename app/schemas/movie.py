@@ -10,6 +10,11 @@ class MovieCategoryBase(BaseSchema):
     slug: str = Field(..., max_length=100)
 
 
+class MovieCategoryCreate(BaseSchema):
+    name: str = Field(..., max_length=100)
+    slug: Optional[str] = Field(None, max_length=100)
+
+
 class MovieCategoryResponse(MovieCategoryBase):
     id: UUID
 
@@ -60,8 +65,11 @@ class MovieCreate(MovieBase):
     pass
 
 
-class MovieUpdate(MovieBase):
-    pass
+class MovieUpdate(BaseSchema):
+    name: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    is_series: Optional[bool] = None
+    category_id: Optional[UUID] = None
 
 
 class MovieResponse(MovieBase):
@@ -81,4 +89,12 @@ class MovieListResponse(BaseSchema):
     is_series: bool
     average_rating: float
     category: Optional[MovieCategoryResponse]
-    primary_poster: Optional[PosterResponse]
+    primary_poster: Optional[PosterResponse] = None
+
+
+class MoviePageResponse(BaseSchema):
+    items: List[MovieListResponse]
+    total: int
+    offset: int
+    limit: int
+    has_more: bool

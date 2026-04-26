@@ -48,7 +48,7 @@ class Movie(Base):
     description = Column(Text, nullable=True)
     is_series = Column(Boolean, default=False, nullable=False)
     average_rating = Column(Float, default=0.0, nullable=False)
-    category_id = Column(UUID(as_uuid=True), ForeignKey("movie_categories.id", ondelete="SET NULL"), nullable=True)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("movie_categories.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -59,6 +59,13 @@ class Movie(Base):
     episodes = relationship("Episode", back_populates="movie", cascade="all, delete-orphan", order_by="Episode.season_number, Episode.episode_number")
     reviews = relationship("Review", back_populates="movie", cascade="all, delete-orphan")
     favorites = relationship("Favorite", back_populates="movie", cascade="all, delete-orphan")
+
+    @property
+    def primary_poster(self):
+        for poster in self.posters:
+            if poster.is_primary:
+                return poster
+        return self.posters[0] if self.posters else None
 
 
 class Poster(Base):

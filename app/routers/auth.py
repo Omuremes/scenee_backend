@@ -1,13 +1,14 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import verify_firebase_token
 from app.core.rate_limit import enforce_rate_limit, get_client_identifier
-from app.core.security import create_access_token, get_current_user
+from app.core.security import create_access_token, get_current_user, security
 from app.models import User
 from app.schemas import TokenResponse, UserLogin, UserRegister, UserResponse, UserSync
 from app.services import UserService

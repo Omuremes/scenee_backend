@@ -44,8 +44,17 @@ class EventCreate(EventBase):
     pass
 
 
-class EventUpdate(EventBase):
-    pass
+class EventUpdate(BaseSchema):
+    title: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    event_type: Optional[EventType] = None
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
+    venue_id: Optional[UUID] = None
+    price: Optional[float] = Field(None, ge=0)
+    max_capacity: Optional[int] = Field(None, ge=0)
+    image_url: Optional[str] = Field(None, max_length=1000)
+    storage_path: Optional[str] = Field(None, max_length=1000)
 
 
 class EventResponse(EventBase):
@@ -68,3 +77,11 @@ class EventListResponse(BaseSchema):
     available_seats: int
     average_rating: float
     image_url: Optional[str]
+
+
+class EventPageResponse(BaseSchema):
+    items: list[EventListResponse]
+    total: int
+    offset: int
+    limit: int
+    has_more: bool

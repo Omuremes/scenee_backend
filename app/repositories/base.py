@@ -22,15 +22,23 @@ class BaseRepository(Generic[ModelType]):
         return result.scalars().all()
 
     async def create(self, obj_in: dict) -> ModelType:
-        db_obj = self.model(**obj_in)
+        # Фильтруем поля, чтобы передать в модель только те, что в ней есть
+        model_columns = self.model.__table__.columns.keys()
+        data = {k: v for k, v in obj_in.items() if k in model_columns}
+        
+        db_obj = self.model(**data)
         self.db.add(db_obj)
         await self.db.commit()
         await self.db.refresh(db_obj)
         return db_obj
 
     async def update(self, id: UUID, obj_in: dict) -> Optional[ModelType]:
+        # Фильтруем поля для обновления
+        model_columns = self.model.__table__.columns.keys()
+        data = {k: v for k, v in obj_in.items() if k in model_columns}
+        
         result = await self.db.execute(
-            update(self.model).where(self.model.id == id).values(**obj_in).returning(self.model)
+            update(self.model).where(self.model.id == id).values(**data).returning(self.model)
         )
         await self.db.commit()
         return result.scalar_one_or_none()

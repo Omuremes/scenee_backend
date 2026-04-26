@@ -1,31 +1,95 @@
+import json
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import delete_cache_by_prefix, get_cache, set_cache
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_admin_user
 from app.models import User
-from app.schemas import MovieCreate, MovieListResponse, MovieResponse, MovieUpdate
-from app.services import MovieService
+from app.schemas import (
+    MovieCategoryCreate,
+    MovieCategoryResponse,
+    MovieCreate,
+    MovieListResponse,
+    MoviePageResponse,
+    MovieResponse,
+    MovieUpdate,
+)
+from app.services import MovieCategoryService, MovieService
+
+PUBLIC_MOVIE_CACHE_PREFIX = "movies:public:"
+PUBLIC_MOVIE_LIST_TTL_SECONDS = 300
+PUBLIC_MOVIE_DETAIL_TTL_SECONDS = 300
+PUBLIC_MOVIE_POPULAR_TTL_SECONDS = 600
 
 public_router = APIRouter(prefix="/public/movies", tags=["movies"])
 admin_router = APIRouter(prefix="/v1admin/movies", tags=["admin-movies"])
 
 
-@public_router.get("/", response_model=List[MovieListResponse])
+def _normalize_query(query: Optional[str], alias_query: Optional[str]) -> Optional[str]:
+    value = alias_query if alias_query is not None else query
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _resolve_offset(offset: int, skip: Optional[int]) -> int:
+    return skip if skip is not None else offset
+
+
+def _serialize_cache_payload(payload) -> str:
+    return json.dumps(jsonable_encoder(payload), separators=(",", ":"), sort_keys=True)
+
+
+async def _invalidate_public_movie_cache() -> None:
+    await delete_cache_by_prefix(PUBLIC_MOVIE_CACHE_PREFIX)
+
+
+@public_router.get("/", response_model=MoviePageResponse)
 async def get_movies(
     query: Optional[str] = Query(None, description="Search query"),
+    q: Optional[str] = Query(None, description="Alias for search query"),
     category_id: Optional[UUID] = Query(None, description="Filter by category"),
     is_series: Optional[bool] = Query(None, description="Filter by series/movies"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    skip: Optional[int] = Query(None, ge=0, description="Deprecated alias for offset"),
+    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
 ):
+    resolved_query = _normalize_query(query, q)
+    resolved_offset = _resolve_offset(offset, skip)
+    cache_key = (
+        f"{PUBLIC_MOVIE_CACHE_PREFIX}list:"
+        f"query={resolved_query or ''}:category={category_id or ''}:"
+        f"is_series={is_series}:offset={resolved_offset}:limit={limit}"
+    )
+    cached_payload = await get_cache(cache_key)
+    if cached_payload:
+        return json.loads(cached_payload)
+
     movie_service = MovieService(db)
-    movies = await movie_service.search_movies(query, category_id, is_series, skip, limit)
-    return [MovieListResponse.model_validate(movie) for movie in movies]
+    movies, total = await movie_service.list_movies(
+        query=resolved_query,
+        category_id=category_id,
+        is_series=is_series,
+        skip=resolved_offset,
+        limit=limit,
+    )
+    response_payload = MoviePageResponse(
+        items=[MovieListResponse.model_validate(movie) for movie in movies],
+        total=total,
+        offset=resolved_offset,
+        limit=limit,
+        has_more=resolved_offset + limit < total,
+    )
+    await set_cache(cache_key, _serialize_cache_payload(response_payload), expire=PUBLIC_MOVIE_LIST_TTL_SECONDS)
+    return response_payload
 
 
 @public_router.get("/popular", response_model=List[MovieListResponse])
@@ -33,14 +97,89 @@ async def get_popular_movies(
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"{PUBLIC_MOVIE_CACHE_PREFIX}popular:limit={limit}"
+    cached_payload = await get_cache(cache_key)
+    if cached_payload:
+        return json.loads(cached_payload)
+
     movie_service = MovieService(db)
     movies = await movie_service.get_popular_movies(limit)
-    return [MovieListResponse.model_validate(movie) for movie in movies]
+    response_payload = [MovieListResponse.model_validate(movie) for movie in movies]
+    await set_cache(cache_key, _serialize_cache_payload(response_payload), expire=PUBLIC_MOVIE_POPULAR_TTL_SECONDS)
+    return response_payload
 
 
 @public_router.get("/{movie_id}", response_model=MovieResponse)
 async def get_movie(
     movie_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    cache_key = f"{PUBLIC_MOVIE_CACHE_PREFIX}detail:{movie_id}"
+    cached_payload = await get_cache(cache_key)
+    if cached_payload:
+        return json.loads(cached_payload)
+
+    movie_service = MovieService(db)
+    movie = await movie_service.get_movie_with_details(movie_id)
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    response_payload = MovieResponse.model_validate(movie)
+    await set_cache(cache_key, _serialize_cache_payload(response_payload), expire=PUBLIC_MOVIE_DETAIL_TTL_SECONDS)
+    return response_payload
+
+
+@admin_router.get("/", response_model=MoviePageResponse)
+async def admin_get_movies(
+    query: Optional[str] = Query(None, description="Search query"),
+    q: Optional[str] = Query(None, description="Alias for search query"),
+    category_id: Optional[UUID] = Query(None, description="Filter by category"),
+    is_series: Optional[bool] = Query(None, description="Filter by series/movies"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    skip: Optional[int] = Query(None, ge=0, description="Deprecated alias for offset"),
+    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    resolved_query = _normalize_query(query, q)
+    resolved_offset = _resolve_offset(offset, skip)
+    movie_service = MovieService(db)
+    movies, total = await movie_service.list_movies(
+        query=resolved_query,
+        category_id=category_id,
+        is_series=is_series,
+        skip=resolved_offset,
+        limit=limit,
+    )
+    return MoviePageResponse(
+        items=[MovieListResponse.model_validate(movie) for movie in movies],
+        total=total,
+        offset=resolved_offset,
+        limit=limit,
+        has_more=resolved_offset + limit < total,
+    )
+
+
+@admin_router.post("/categories", response_model=MovieCategoryResponse, status_code=status.HTTP_201_CREATED)
+async def create_movie_category(
+    category_data: MovieCategoryCreate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    category_service = MovieCategoryService(db)
+    try:
+        category = await category_service.create_category(category_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await _invalidate_public_movie_cache()
+    return MovieCategoryResponse.model_validate(category)
+
+
+@admin_router.get("/{movie_id}", response_model=MovieResponse)
+async def admin_get_movie(
+    movie_id: UUID,
+    _current_admin: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     movie_service = MovieService(db)
@@ -50,14 +189,19 @@ async def get_movie(
     return MovieResponse.model_validate(movie)
 
 
-@admin_router.post("/", response_model=MovieResponse)
+@admin_router.post("/", response_model=MovieResponse, status_code=status.HTTP_201_CREATED)
 async def create_movie(
     movie_data: MovieCreate,
-    current_admin: User = Depends(get_current_admin_user),
+    _current_admin: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     movie_service = MovieService(db)
-    movie = await movie_service.create_movie(movie_data)
+    try:
+        movie = await movie_service.create_movie(movie_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await _invalidate_public_movie_cache()
     return MovieResponse.model_validate(movie)
 
 
@@ -65,11 +209,32 @@ async def create_movie(
 async def update_movie(
     movie_id: UUID,
     movie_data: MovieUpdate,
-    current_admin: User = Depends(get_current_admin_user),
+    _current_admin: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     movie_service = MovieService(db)
-    movie = await movie_service.update_movie(movie_id, movie_data)
+    try:
+        movie = await movie_service.update_movie(movie_id, movie_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
+
+    await _invalidate_public_movie_cache()
     return MovieResponse.model_validate(movie)
+
+
+@admin_router.delete("/{movie_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_movie(
+    movie_id: UUID,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    movie_service = MovieService(db)
+    deleted = await movie_service.delete(movie_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    await _invalidate_public_movie_cache()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

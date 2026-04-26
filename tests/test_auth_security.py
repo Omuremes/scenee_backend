@@ -139,6 +139,12 @@ async def test_protected_routes_require_authentication():
         )
         assert admin_response.status_code == 401
 
+        admin_category_response = await client.post(
+            "/v1admin/movies/categories",
+            json={"name": "Drama"},
+        )
+        assert admin_category_response.status_code == 401
+
 
 @pytest.mark.asyncio
 async def test_booking_reference_is_hidden_from_other_users(monkeypatch):

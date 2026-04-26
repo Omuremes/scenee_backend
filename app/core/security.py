@@ -7,13 +7,17 @@ import time
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models import User
 
+# Этот объект говорит FastAPI, что используется Bearer-токен. 
+# В Swagger появится кнопка Authorize.
+security = HTTPBearer()
 
 def _b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("utf-8")
@@ -76,17 +80,11 @@ def verify_access_token(token: str) -> dict:
 
 
 async def get_current_user(
-    authorization: str | None = Header(None),
+    auth: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization[len("Bearer ") :].strip()
+    # auth.credentials автоматически содержит токен без префикса "Bearer "
+    token = auth.credentials
     try:
         payload = verify_access_token(token)
     except ValueError as exc:
@@ -113,7 +111,6 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Import here to avoid circular import
     from app.services import UserService
     user = await UserService(db).get_user_by_id(user_id)
     if not user:
