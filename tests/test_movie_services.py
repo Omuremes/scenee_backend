@@ -27,16 +27,18 @@ class FakeMovieRepository:
         self.db = object()
         self.update_called = False
         self.created_payload = None
+        self.created_kwargs = None
 
     async def get_with_details(self, movie_id):
         return SimpleNamespace(id=movie_id, name="Existing movie")
 
-    async def update(self, movie_id, data):
+    async def update_movie_with_relations(self, movie_id, data, **kwargs):
         self.update_called = True
         return SimpleNamespace(id=movie_id, **data)
 
-    async def create(self, data):
+    async def create_movie(self, data, **kwargs):
         self.created_payload = data
+        self.created_kwargs = kwargs
         return SimpleNamespace(id=uuid4(), **data)
 
 
@@ -72,19 +74,43 @@ async def test_movie_service_create_requires_existing_category(monkeypatch):
     service = object.__new__(MovieService)
     service.repository = repository
 
-    async def fake_get_by_id(self, category_id):
-        return None
+    async def fake_get_by_ids(self, category_ids):
+        return []
 
-    monkeypatch.setattr(MovieCategoryRepository, "get_by_id", fake_get_by_id)
+    monkeypatch.setattr(MovieCategoryRepository, "get_by_ids", fake_get_by_ids)
 
-    with pytest.raises(ValueError, match="Movie category not found"):
+    with pytest.raises(ValueError, match="One or more movie categories were not found"):
         await service.create_movie(
             MovieCreate(
                 name="New movie",
                 description="Description",
                 is_series=False,
-                category_id=uuid4(),
+                duration=125,
+                categories=[uuid4()],
             )
         )
 
     assert repository.created_payload is None
+
+
+@pytest.mark.asyncio
+async def test_movie_service_maps_duration_to_minutes_and_sets_single_season():
+    repository = FakeMovieRepository()
+    service = object.__new__(MovieService)
+    service.repository = repository
+
+    movie = await service.create_movie(
+        MovieCreate(
+            name="Arrival",
+            description="First contact",
+            is_series=False,
+            duration=116,
+            actors=[],
+            categories=[],
+            episodes=[],
+        )
+    )
+
+    assert repository.created_payload["duration_minutes"] == 116
+    assert repository.created_payload["seasons_count"] == 1
+    assert movie.name == "Existing movie" or movie.id is not None

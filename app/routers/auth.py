@@ -13,7 +13,7 @@ from app.models import User
 from app.schemas import TokenResponse, UserLogin, UserRegister, UserResponse, UserSync
 from app.services import UserService
 
-router = APIRouter(prefix="/public/auth", tags=["auth"])
+router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserResponse)

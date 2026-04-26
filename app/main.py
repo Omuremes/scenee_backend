@@ -3,7 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import (
     admin_events_router,
+    admin_actors_router,
     admin_movies_router,
+    actors_router,
     auth_router,
     bookings_router,
     events_router,
@@ -28,6 +30,8 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(actors_router)
+app.include_router(admin_actors_router)
 app.include_router(movies_router)
 app.include_router(admin_movies_router)
 app.include_router(events_router)

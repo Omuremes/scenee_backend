@@ -17,7 +17,7 @@ from app.schemas import (
 )
 from app.services import EventReviewService, ReviewService
 
-router = APIRouter(prefix="/public/reviews", tags=["reviews"])
+router = APIRouter(prefix="/v1/reviews", tags=["reviews"])
 
 
 @router.post("/movies", response_model=ReviewResponse)
@@ -27,7 +27,10 @@ async def create_movie_review(
     db: AsyncSession = Depends(get_db),
 ):
     review_service = ReviewService(db)
-    review = await review_service.create_review(current_user.id, review_data)
+    try:
+        review = await review_service.create_review(current_user.id, review_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return ReviewResponse.model_validate(review)
 
 
@@ -77,7 +80,10 @@ async def create_event_review(
     db: AsyncSession = Depends(get_db),
 ):
     event_review_service = EventReviewService(db)
-    review = await event_review_service.create_event_review(current_user.id, review_data)
+    try:
+        review = await event_review_service.create_event_review(current_user.id, review_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return EventReviewResponse.model_validate(review)
 
 

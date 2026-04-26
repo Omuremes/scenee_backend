@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, validator
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -18,6 +18,13 @@ class UserSync(UserBase):
 class UserRegister(UserBase):
     email: str = Field(..., max_length=100)
     password: str = Field(..., min_length=8, max_length=255)
+    confirm_password: str = Field(..., min_length=8, max_length=255)
+
+    @validator("confirm_password")
+    def passwords_match(cls, v, values, **kwargs):
+        if "password" in values and v != values["password"]:
+            raise ValueError("passwords do not match")
+        return v
 
 
 class UserLogin(BaseSchema):

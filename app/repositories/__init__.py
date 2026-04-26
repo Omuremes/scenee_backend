@@ -1,4 +1,5 @@
 from .base import BaseRepository
+from .actor import ActorRepository
 from .user import UserRepository
 from .movie import MovieRepository, MovieCategoryRepository
 from .event import EventRepository, VenueRepository
@@ -8,6 +9,7 @@ from .review import ReviewRepository, EventReviewRepository
 
 __all__ = [
     "BaseRepository",
+    "ActorRepository",
     "UserRepository",
     "MovieRepository", "MovieCategoryRepository",
     "EventRepository", "VenueRepository",

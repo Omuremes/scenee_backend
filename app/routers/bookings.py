@@ -10,7 +10,7 @@ from app.models import User
 from app.schemas import BookingCreate, BookingResponse
 from app.services import BookingService
 
-router = APIRouter(prefix="/public/bookings", tags=["bookings"])
+router = APIRouter(prefix="/v1/bookings", tags=["bookings"])
 
 
 @router.post("/", response_model=BookingResponse)

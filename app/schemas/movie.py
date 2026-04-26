@@ -1,7 +1,9 @@
-from pydantic import Field
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
 from uuid import UUID
+
+from pydantic import Field
+
 from app.schemas.base import BaseSchema
 
 
@@ -25,13 +27,31 @@ class ActorBase(BaseSchema):
     bio: Optional[str] = None
 
 
+class ActorCreate(ActorBase):
+    pass
+
+
+class ActorUpdate(BaseSchema):
+    full_name: Optional[str] = Field(None, max_length=255)
+    photo_url: Optional[str] = Field(None, max_length=500)
+    bio: Optional[str] = None
+
+
 class ActorResponse(ActorBase):
     id: UUID
 
 
+class ActorPageResponse(BaseSchema):
+    items: List[ActorResponse] = Field(default_factory=list)
+    total: int
+    offset: int
+    limit: int
+    has_more: bool
+
+
 class PosterBase(BaseSchema):
     url: str = Field(..., max_length=1000)
-    storage_path: str = Field(..., max_length=1000)
+    storage_path: Optional[str] = Field(None, max_length=1000)
     is_primary: bool = False
 
 
@@ -46,7 +66,20 @@ class EpisodeBase(BaseSchema):
     title: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     video_url: Optional[str] = Field(None, max_length=1000)
-    duration_sec: Optional[int] = Field(None, ge=0)
+    duration: Optional[int] = Field(None, ge=0)
+
+
+class EpisodeCreate(EpisodeBase):
+    pass
+
+
+class EpisodeUpdate(BaseSchema):
+    season_number: Optional[int] = Field(None, ge=1)
+    episode_number: Optional[int] = Field(None, ge=1)
+    title: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    video_url: Optional[str] = Field(None, max_length=1000)
+    duration: Optional[int] = Field(None, ge=0)
 
 
 class EpisodeResponse(EpisodeBase):
@@ -58,18 +91,27 @@ class MovieBase(BaseSchema):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     is_series: bool = False
-    category_id: Optional[UUID] = None
+    duration: Optional[int] = Field(None, ge=1, description="Movie duration in minutes")
+    seasons_count: int = Field(default=1, ge=1)
 
 
 class MovieCreate(MovieBase):
-    pass
+    poster: Optional[str] = Field(None, max_length=1000, description="Poster URL when JSON payload is used")
+    actors: List[UUID] = Field(default_factory=list)
+    categories: List[UUID] = Field(default_factory=list)
+    episodes: List[EpisodeCreate] = Field(default_factory=list)
 
 
 class MovieUpdate(BaseSchema):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     is_series: Optional[bool] = None
-    category_id: Optional[UUID] = None
+    duration: Optional[int] = Field(None, ge=1, description="Movie duration in minutes")
+    seasons_count: Optional[int] = Field(None, ge=1)
+    poster: Optional[str] = Field(None, max_length=1000, description="Poster URL when JSON payload is used")
+    actors: Optional[List[UUID]] = None
+    categories: Optional[List[UUID]] = None
+    episodes: Optional[List[EpisodeCreate]] = None
 
 
 class MovieResponse(MovieBase):
@@ -77,23 +119,29 @@ class MovieResponse(MovieBase):
     average_rating: float
     created_at: datetime
     updated_at: Optional[datetime]
-    category: Optional[MovieCategoryResponse]
-    actors: List[ActorResponse] = []
-    posters: List[PosterResponse] = []
-    episodes: List[EpisodeResponse] = []
+    category: Optional[MovieCategoryResponse] = None
+    categories: List[MovieCategoryResponse] = Field(default_factory=list)
+    actors: List[ActorResponse] = Field(default_factory=list)
+    posters: List[PosterResponse] = Field(default_factory=list)
+    episodes: List[EpisodeResponse] = Field(default_factory=list)
+    primary_poster: Optional[PosterResponse] = None
 
 
 class MovieListResponse(BaseSchema):
     id: UUID
     name: str
     is_series: bool
+    duration: Optional[int] = None
+    seasons_count: int
     average_rating: float
-    category: Optional[MovieCategoryResponse]
+    category: Optional[MovieCategoryResponse] = None
+    categories: List[MovieCategoryResponse] = Field(default_factory=list)
     primary_poster: Optional[PosterResponse] = None
+    created_at: datetime
 
 
 class MoviePageResponse(BaseSchema):
-    items: List[MovieListResponse]
+    items: List[MovieListResponse] = Field(default_factory=list)
     total: int
     offset: int
     limit: int

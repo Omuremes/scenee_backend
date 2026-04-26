@@ -15,6 +15,16 @@ from app.services.movie import MovieCategoryService, MovieService
 def _build_movie(movie_id=None):
     movie_id = movie_id or uuid4()
     category = SimpleNamespace(id=uuid4(), name="Drama", slug="drama")
+    episode = SimpleNamespace(
+        id=uuid4(),
+        movie_id=movie_id,
+        season_number=1,
+        episode_number=1,
+        title="Pilot",
+        description=None,
+        video_url=None,
+        duration=42,
+    )
     poster = SimpleNamespace(
         id=uuid4(),
         movie_id=movie_id,
@@ -27,14 +37,17 @@ def _build_movie(movie_id=None):
         name="Arrival",
         description="First contact",
         is_series=False,
+        duration=116,
+        seasons_count=1,
         average_rating=8.9,
         created_at="2026-04-26T10:00:00",
         updated_at=None,
         category_id=category.id,
         category=category,
+        categories=[category],
         actors=[],
         posters=[poster],
-        episodes=[],
+        episodes=[episode],
         primary_poster=poster,
     )
 
@@ -70,7 +83,7 @@ async def test_public_movies_returns_paginated_payload_and_sets_cache(monkeypatc
 
     try:
         async with AsyncClient(app=app, base_url="http://testserver") as client:
-            response = await client.get("/public/movies/?q=arrival&offset=10&limit=5")
+            response = await client.get("/v1/movies/?q=arrival&offset=10&limit=5")
         assert response.status_code == 200
         assert response.json()["total"] == 16
         assert response.json()["offset"] == 10
@@ -107,7 +120,7 @@ async def test_public_movies_uses_cached_payload(monkeypatch):
 
     try:
         async with AsyncClient(app=app, base_url="http://testserver") as client:
-            response = await client.get("/public/movies/")
+            response = await client.get("/v1/movies/")
         assert response.status_code == 200
         assert response.json() == cached_payload
     finally:
@@ -149,10 +162,10 @@ async def test_admin_movie_routes_support_list_detail_category_and_delete(monkey
 
     try:
         async with AsyncClient(app=app, base_url="http://testserver") as client:
-            list_response = await client.get("/v1admin/movies/")
-            detail_response = await client.get(f"/v1admin/movies/{movie.id}")
-            category_response = await client.post("/v1admin/movies/categories", json={"name": "Drama"})
-            delete_response = await client.delete(f"/v1admin/movies/{movie.id}")
+            list_response = await client.get("/v1/admin/movies/")
+            detail_response = await client.get(f"/v1/admin/movies/{movie.id}")
+            category_response = await client.post("/v1/admin/movies/categories", json={"name": "Drama"})
+            delete_response = await client.delete(f"/v1/admin/movies/{movie.id}")
 
         assert list_response.status_code == 200
         assert list_response.json()["total"] == 1
@@ -161,5 +174,47 @@ async def test_admin_movie_routes_support_list_detail_category_and_delete(monkey
         assert category_response.status_code == 201
         assert category_response.json()["slug"] == "drama"
         assert delete_response.status_code == 204
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_public_movie_routes_expose_new_and_episodes(monkeypatch):
+    movie = _build_movie()
+
+    async def fake_get_db():
+        yield object()
+
+    async def fake_get_new_movies(self, limit):
+        assert limit == 3
+        return [movie]
+
+    async def fake_get_season_episodes(self, movie_id, season_number):
+        assert movie_id == movie.id
+        assert season_number == 1
+        return movie.episodes
+
+    async def fake_get_cache(key: str):
+        return None
+
+    async def fake_set_cache(key: str, value: str, expire: int):
+        return True
+
+    monkeypatch.setattr(MovieService, "get_new_movies", fake_get_new_movies)
+    monkeypatch.setattr(MovieService, "get_season_episodes", fake_get_season_episodes)
+    monkeypatch.setattr(movies_router_module, "get_cache", fake_get_cache)
+    monkeypatch.setattr(movies_router_module, "set_cache", fake_set_cache)
+    app.dependency_overrides[get_db] = fake_get_db
+
+    try:
+        async with AsyncClient(app=app, base_url="http://testserver") as client:
+            new_response = await client.get("/v1/movies/new?limit=3")
+            episodes_response = await client.get(f"/v1/movies/{movie.id}/seasons/1/episodes")
+
+        assert new_response.status_code == 200
+        assert new_response.json()[0]["id"] == str(movie.id)
+        assert episodes_response.status_code == 200
+        assert episodes_response.json()[0]["episode_number"] == 1
+        assert episodes_response.json()[0]["duration"] == 42
     finally:
         app.dependency_overrides.clear()

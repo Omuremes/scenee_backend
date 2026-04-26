@@ -84,6 +84,7 @@ async def test_create_user_normalizes_email_and_hashes_password():
         UserRegister(
             email="  TestUser@Example.com ",
             password="super-secret-pass",
+            confirm_password="super-secret-pass",
             username="tester",
         )
     )
@@ -134,13 +135,13 @@ async def test_protected_routes_require_authentication():
         assert bookings_response.status_code == 401
 
         admin_response = await client.post(
-            "/v1admin/movies/",
+            "/v1/admin/movies/",
             json={"name": "Test movie"},
         )
         assert admin_response.status_code == 401
 
         admin_category_response = await client.post(
-            "/v1admin/movies/categories",
+            "/v1/admin/movies/categories",
             json={"name": "Drama"},
         )
         assert admin_category_response.status_code == 401

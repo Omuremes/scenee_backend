@@ -10,7 +10,7 @@ from app.models import User
 from app.schemas import FavoriteCreate, FavoriteResponse
 from app.services import FavoriteService
 
-router = APIRouter(prefix="/public/favorites", tags=["favorites"])
+router = APIRouter(prefix="/v1/favorites", tags=["favorites"])
 
 
 @router.post("/", response_model=FavoriteResponse)

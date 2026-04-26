@@ -11,7 +11,7 @@ from app.models import User
 from app.schemas import EventCreate, EventListResponse, EventPageResponse, EventResponse, EventType, EventUpdate
 from app.services import EventService
 
-public_router = APIRouter(prefix="/public/events", tags=["events"])
+public_router = APIRouter(prefix="/v1/events", tags=["events"])
 admin_router = APIRouter(prefix="/v1admin/events", tags=["admin-events"])
 
 
