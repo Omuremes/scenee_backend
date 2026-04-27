@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import delete_cache_by_prefix, get_cache, set_cache
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.minio import upload_file
+from app.core.minio import to_public_url, upload_file
 from app.core.security import get_current_admin_user
 from app.models import User
 from app.schemas import (
@@ -175,7 +175,7 @@ def _poster_from_url(url: str) -> dict:
     normalized_url = url.strip()
     if not normalized_url:
         raise HTTPException(status_code=400, detail="Poster URL cannot be empty")
-    return {"url": normalized_url, "storage_path": None, "is_primary": True}
+    return {"url": to_public_url(normalized_url) or normalized_url, "storage_path": None, "is_primary": True}
 
 
 async def _parse_movie_request(request: Request, partial: bool = False) -> Tuple[MovieCreate | MovieUpdate, Optional[dict], bool]:

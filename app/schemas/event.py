@@ -1,8 +1,10 @@
-from pydantic import Field
+from pydantic import Field, validator
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
 from enum import Enum
+
+from app.core.minio import to_public_url
 from app.schemas.base import BaseSchema
 
 
@@ -41,7 +43,9 @@ class EventBase(BaseSchema):
 
 
 class EventCreate(EventBase):
-    pass
+    @validator("image_url", pre=True, allow_reuse=True)
+    def normalize_image_url(cls, value):
+        return to_public_url(value)
 
 
 class EventUpdate(BaseSchema):
@@ -55,6 +59,10 @@ class EventUpdate(BaseSchema):
     max_capacity: Optional[int] = Field(None, ge=0)
     image_url: Optional[str] = Field(None, max_length=1000)
     storage_path: Optional[str] = Field(None, max_length=1000)
+
+    @validator("image_url", pre=True, allow_reuse=True)
+    def normalize_image_url(cls, value):
+        return to_public_url(value)
 
 
 class EventResponse(EventBase):

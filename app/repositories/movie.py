@@ -6,6 +6,7 @@ from sqlalchemy import case, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.minio import normalize_media_fields
 from app.models import Actor, Episode, Movie, MovieCategory, Poster, Review
 from app.repositories.base import BaseRepository
 
@@ -176,7 +177,7 @@ class MovieRepository(BaseRepository[Movie]):
         movie.category_id = movie.categories[0].id if movie.categories else None
         movie.episodes = [Episode(**episode_data) for episode_data in episodes]
         if poster_payload:
-            movie.posters = [Poster(**poster_payload)]
+            movie.posters = [Poster(**normalize_media_fields(poster_payload, ("url",)))]
 
         self.db.add(movie)
         await self.db.commit()
@@ -212,7 +213,7 @@ class MovieRepository(BaseRepository[Movie]):
             movie.episodes = [Episode(**episode_data) for episode_data in episodes]
 
         if poster_provided:
-            movie.posters = [Poster(**poster_payload)] if poster_payload else []
+            movie.posters = [Poster(**normalize_media_fields(poster_payload, ("url",)))] if poster_payload else []
 
         await self.db.commit()
         await self.db.refresh(movie)

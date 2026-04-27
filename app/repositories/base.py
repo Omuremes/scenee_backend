@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.orm import selectinload
 from app.core.database import Base
+from app.core.minio import normalize_media_fields
 
 ModelType = TypeVar("ModelType", bound=Base)
 
@@ -25,6 +26,7 @@ class BaseRepository(Generic[ModelType]):
         # Фильтруем поля, чтобы передать в модель только те, что в ней есть
         model_columns = self.model.__table__.columns.keys()
         data = {k: v for k, v in obj_in.items() if k in model_columns}
+        data = normalize_media_fields(data, ("photo_url", "image_url", "url"))
         
         db_obj = self.model(**data)
         self.db.add(db_obj)
@@ -36,6 +38,7 @@ class BaseRepository(Generic[ModelType]):
         # Фильтруем поля для обновления
         model_columns = self.model.__table__.columns.keys()
         data = {k: v for k, v in obj_in.items() if k in model_columns}
+        data = normalize_media_fields(data, ("photo_url", "image_url", "url"))
         
         result = await self.db.execute(
             update(self.model).where(self.model.id == id).values(**data).returning(self.model)

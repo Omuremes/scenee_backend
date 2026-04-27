@@ -63,6 +63,17 @@ def to_public_url(url: str | None) -> str | None:
     )
 
 
+def normalize_media_fields(data: dict | None, fields: tuple[str, ...]) -> dict:
+    if not data:
+        return {}
+
+    normalized = dict(data)
+    for field in fields:
+        if field in normalized:
+            normalized[field] = to_public_url(normalized[field])
+    return normalized
+
+
 async def upload_file(bucket_name: str, object_name: str, file_path: str, content_type: str = "application/octet-stream") -> str:
     """
     Загрузить файл в MinIO

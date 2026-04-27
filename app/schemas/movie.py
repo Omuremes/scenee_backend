@@ -42,13 +42,19 @@ class ActorBase(BaseSchema):
 
 
 class ActorCreate(ActorBase):
-    pass
+    @validator("photo_url", pre=True, allow_reuse=True)
+    def normalize_photo_url(cls, value):
+        return to_public_url(value)
 
 
 class ActorUpdate(BaseSchema):
     full_name: Optional[str] = Field(None, max_length=255)
     photo_url: Optional[str] = Field(None, max_length=500)
     bio: Optional[str] = None
+
+    @validator("photo_url", pre=True, allow_reuse=True)
+    def normalize_photo_url(cls, value):
+        return to_public_url(value)
 
 
 class ActorResponse(ActorBase):
@@ -72,10 +78,6 @@ class PosterBase(BaseSchema):
 class PosterResponse(PosterBase):
     id: UUID
     movie_id: UUID
-
-    @validator("url", pre=True, allow_reuse=True)
-    def normalize_poster_url(cls, value):
-        return to_public_url(value)
 
 
 class EpisodeBase(BaseSchema):

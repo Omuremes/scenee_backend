@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import delete_cache_by_prefix, get_cache, set_cache
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.minio import upload_file
+from app.core.minio import to_public_url, upload_file
 from app.core.security import get_current_admin_user
 from app.models import User
 from app.schemas import ActorCreate, ActorPageResponse, ActorResponse, ActorUpdate
@@ -89,7 +89,7 @@ def _photo_from_url(url: str) -> str:
     normalized_url = url.strip()
     if not normalized_url:
         raise HTTPException(status_code=400, detail="Photo URL cannot be empty")
-    return normalized_url
+    return to_public_url(normalized_url) or normalized_url
 
 
 async def _upload_actor_photo(photo_file: UploadFile) -> str:
