@@ -31,6 +31,12 @@ async def test_actor_routes_support_public_and_admin_endpoints(monkeypatch):
     async def fake_create_actor(self, actor_data):
         return SimpleNamespace(id=actor_id, full_name=actor_data.full_name, photo_url=actor_data.photo_url, bio=actor_data.bio)
 
+    async def fake_upload_file(bucket_name: str, object_name: str, file_path: str, content_type: str = "application/octet-stream"):
+        captured_cache["uploaded_bucket"] = bucket_name
+        captured_cache["uploaded_object"] = object_name
+        captured_cache["uploaded_content_type"] = content_type
+        return f"https://cdn.example.com/{object_name}"
+
     async def fake_get_by_id(self, actor_id_param):
         return SimpleNamespace(id=actor_id_param, full_name="Amy Adams", photo_url=None, bio=None)
 
@@ -48,6 +54,7 @@ async def test_actor_routes_support_public_and_admin_endpoints(monkeypatch):
     monkeypatch.setattr(ActorService, "get_by_id", fake_get_by_id)
     monkeypatch.setattr(actors_router_module, "get_cache", fake_get_cache)
     monkeypatch.setattr(actors_router_module, "set_cache", fake_set_cache)
+    monkeypatch.setattr(actors_router_module, "upload_file", fake_upload_file)
     app.dependency_overrides[get_db] = fake_get_db
     app.dependency_overrides[get_current_admin_user] = fake_admin_user
 
@@ -56,7 +63,11 @@ async def test_actor_routes_support_public_and_admin_endpoints(monkeypatch):
             list_response = await client.get("/v1/actors/")
             admin_list_response = await client.get("/v1/admin/actors/?q=amy&offset=5&limit=10")
             admin_detail_response = await client.get(f"/v1/admin/actors/{actor_id}")
-            create_response = await client.post("/v1/admin/actors/", json={"full_name": "Amy Adams"})
+            create_response = await client.post(
+                "/v1/admin/actors/",
+                data={"full_name": "Amy Adams", "bio": "Award-winning actor"},
+                files={"photo": ("amy.jpg", b"binary-image", "image/jpeg")},
+            )
 
         assert list_response.status_code == 200
         assert list_response.json()["items"][0]["full_name"] == "Amy Adams"
@@ -66,9 +77,12 @@ async def test_actor_routes_support_public_and_admin_endpoints(monkeypatch):
         assert admin_detail_response.json()["id"] == str(actor_id)
         assert create_response.status_code == 201
         assert create_response.json()["id"] == str(actor_id)
+        assert create_response.json()["photo_url"].startswith("https://cdn.example.com/actors/")
         assert captured_cache["query"] == "amy"
         assert captured_cache["skip"] == 5
         assert captured_cache["limit"] == 10
         assert captured_cache["expire"] == actors_router_module.ADMIN_ACTOR_LIST_TTL_SECONDS
+        assert captured_cache["uploaded_bucket"] == actors_router_module.settings.MINIO_BUCKET_NAME
+        assert captured_cache["uploaded_content_type"] == "image/jpeg"
     finally:
         app.dependency_overrides.clear()

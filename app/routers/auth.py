@@ -10,13 +10,25 @@ from app.core.firebase import verify_firebase_token
 from app.core.rate_limit import enforce_rate_limit, get_client_identifier
 from app.core.security import create_access_token, get_current_user, security
 from app.models import User
-from app.schemas import TokenResponse, UserLogin, UserRegister, UserResponse, UserSync
+from app.schemas import RegisterResponse, TokenResponse, UserLogin, UserRegister, UserResponse, UserSync
 from app.services import UserService
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserResponse)
+def _build_token_response(user: User) -> TokenResponse:
+    access_token = create_access_token(
+        {"sub": str(user.id), "role": user.role},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+@router.post("/register", response_model=RegisterResponse)
 async def register_user(
     user_data: UserRegister,
     request: Request,
@@ -31,7 +43,14 @@ async def register_user(
         )
         user_service = UserService(db)
         result = await user_service.create_user(user_data)
-        return UserResponse.model_validate(result["user"])
+        user = result["user"]
+        token_response = _build_token_response(user)
+        return RegisterResponse(
+            access_token=token_response.access_token,
+            token_type=token_response.token_type,
+            expires_in=token_response.expires_in,
+            user=UserResponse.model_validate(user),
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -61,15 +80,7 @@ async def login_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(
-        {"sub": str(user.id), "role": user.role},
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
+    return _build_token_response(user)
 
 
 @router.get("/me", response_model=UserResponse)

@@ -8,6 +8,7 @@ from httpx import AsyncClient
 from app.core.database import get_db
 from app.core.security import get_current_user, verify_password
 from app.main import app
+from app.routers import auth as auth_router
 from app.routers.bookings import BookingService
 from app.schemas import UserRegister, UserSync
 from app.schemas.booking import BookingStatus
@@ -92,6 +93,47 @@ async def test_create_user_normalizes_email_and_hashes_password():
     assert result["user"].email == "testuser@example.com"
     assert repository.created_payload["password_hash"] != "super-secret-pass"
     assert verify_password("super-secret-pass", repository.created_payload["password_hash"])
+
+
+@pytest.mark.asyncio
+async def test_register_returns_access_token_and_user(monkeypatch):
+    created_user = SimpleNamespace(
+        id=uuid4(),
+        email="newuser@example.com",
+        firebase_uid=None,
+        role="user",
+        username="newbie",
+        avatar_url=None,
+        created_at=datetime.utcnow(),
+    )
+
+    async def fake_create_user(self, user_data):
+        return {"user": created_user}
+
+    async def fake_enforce_rate_limit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(UserService, "create_user", fake_create_user)
+    monkeypatch.setattr(auth_router, "enforce_rate_limit", fake_enforce_rate_limit)
+
+    async with AsyncClient(app=app, base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/auth/register",
+            json={
+                "email": "newuser@example.com",
+                "password": "super-secret-pass",
+                "confirm_password": "super-secret-pass",
+                "username": "newbie",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["token_type"] == "bearer"
+    assert payload["expires_in"] > 0
+    assert payload["access_token"]
+    assert payload["user"]["email"] == "newuser@example.com"
+    assert payload["user"]["role"] == "user"
 
 
 @pytest.mark.asyncio

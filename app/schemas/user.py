@@ -52,3 +52,7 @@ class UserResponse(UserBase):
     email: Optional[str] = None
     role: str
     created_at: datetime
+
+
+class RegisterResponse(TokenResponse):
+    user: UserResponse

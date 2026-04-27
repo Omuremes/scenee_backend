@@ -1,5 +1,5 @@
 from .base import BaseSchema
-from .user import UserBase, UserSync, UserRegister, UserLogin, UserCreate, UserUpdate, TokenResponse, UserResponse
+from .user import UserBase, UserSync, UserRegister, UserLogin, UserCreate, UserUpdate, TokenResponse, UserResponse, RegisterResponse
 from .movie import (
     MovieCategoryBase, MovieCategoryCreate, MovieCategoryUpdate, MovieCategoryResponse, MovieCategoryPageResponse,
     ActorBase, ActorCreate, ActorUpdate, ActorResponse, ActorPageResponse,
@@ -15,7 +15,7 @@ from .event_review import EventReviewBase, EventReviewCreate, EventReviewUpdate,
 
 __all__ = [
     "BaseSchema",
-    "UserBase", "UserSync", "UserRegister", "UserLogin", "UserCreate", "UserUpdate", "TokenResponse", "UserResponse",
+    "UserBase", "UserSync", "UserRegister", "UserLogin", "UserCreate", "UserUpdate", "TokenResponse", "UserResponse", "RegisterResponse",
     "MovieCategoryBase", "MovieCategoryCreate", "MovieCategoryUpdate", "MovieCategoryResponse", "MovieCategoryPageResponse",
     "ActorBase", "ActorCreate", "ActorUpdate", "ActorResponse", "ActorPageResponse",
     "PosterBase", "PosterResponse",
