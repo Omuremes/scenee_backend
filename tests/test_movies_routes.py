@@ -166,6 +166,8 @@ async def test_admin_movie_routes_support_list_detail_and_delete(monkeypatch):
         assert list_response.json()["total"] == 1
         assert detail_response.status_code == 200
         assert detail_response.json()["id"] == str(movie.id)
+        assert detail_response.json()["posters"][0]["url"] == movie.posters[0].url
+        assert detail_response.json()["primary_poster"]["url"] == movie.primary_poster.url
         assert delete_response.status_code == 204
     finally:
         app.dependency_overrides.clear()

@@ -1,5 +1,7 @@
 from minio import Minio
 from minio.error import S3Error
+from urllib.parse import urlsplit, urlunsplit
+
 from app.core.config import settings
 
 # MinIO client
@@ -9,6 +11,56 @@ minio_client = Minio(
     secret_key=settings.MINIO_SECRET_KEY,
     secure=settings.MINIO_SECURE
 )
+
+
+def _extract_netloc(endpoint: str) -> str:
+    normalized = endpoint.strip().rstrip("/")
+    if "://" not in normalized:
+        normalized = f"http://{normalized}"
+    return urlsplit(normalized).netloc
+
+
+def get_minio_public_base_url() -> str:
+    configured_base_url = settings.MINIO_PUBLIC_BASE_URL
+    if configured_base_url:
+        return configured_base_url.strip().rstrip("/")
+
+    netloc = _extract_netloc(settings.MINIO_ENDPOINT)
+    host, separator, port = netloc.partition(":")
+    if host == "minio":
+        host = "localhost"
+    public_netloc = f"{host}{separator}{port}" if separator else host
+    scheme = "https" if settings.MINIO_SECURE else "http"
+    return f"{scheme}://{public_netloc}"
+
+
+def build_public_object_url(bucket_name: str, object_name: str) -> str:
+    normalized_object_name = object_name.lstrip("/")
+    return f"{get_minio_public_base_url()}/{bucket_name}/{normalized_object_name}"
+
+
+def to_public_url(url: str | None) -> str | None:
+    if not url:
+        return url
+
+    parsed_url = urlsplit(url)
+    if not parsed_url.scheme or not parsed_url.netloc:
+        return url
+
+    internal_netloc = _extract_netloc(settings.MINIO_ENDPOINT)
+    if parsed_url.netloc != internal_netloc:
+        return url
+
+    public_base_url = urlsplit(get_minio_public_base_url())
+    return urlunsplit(
+        (
+            public_base_url.scheme,
+            public_base_url.netloc,
+            parsed_url.path,
+            parsed_url.query,
+            parsed_url.fragment,
+        )
+    )
 
 
 async def upload_file(bucket_name: str, object_name: str, file_path: str, content_type: str = "application/octet-stream") -> str:
@@ -24,7 +76,7 @@ async def upload_file(bucket_name: str, object_name: str, file_path: str, conten
         minio_client.fput_object(bucket_name, object_name, file_path, content_type=content_type)
 
         # Возвращаем URL файла
-        return f"http{'s' if settings.MINIO_SECURE else ''}://{settings.MINIO_ENDPOINT}/{bucket_name}/{object_name}"
+        return build_public_object_url(bucket_name, object_name)
 
     except S3Error as e:
         raise ValueError(f"Failed to upload file to MinIO: {str(e)}")

@@ -2,8 +2,9 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, validator
 
+from app.core.minio import to_public_url
 from app.schemas.base import BaseSchema
 
 
@@ -71,6 +72,10 @@ class PosterBase(BaseSchema):
 class PosterResponse(PosterBase):
     id: UUID
     movie_id: UUID
+
+    @validator("url", pre=True, allow_reuse=True)
+    def normalize_poster_url(cls, value):
+        return to_public_url(value)
 
 
 class EpisodeBase(BaseSchema):

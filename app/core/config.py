@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_SECURE: bool = False
     MINIO_BUCKET_NAME: str = "cinescope-media"
+    MINIO_PUBLIC_BASE_URL: Optional[str] = None
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"

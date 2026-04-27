@@ -18,12 +18,11 @@ class BaseSchema(PydanticBaseModel):
             orm_mode = True
 
     @classmethod
-    def model_validate(cls, obj: Any):
+    def model_validate(cls, obj: Any, *args, **kwargs):
         if isinstance(obj, cls):
             return obj
         if _PYDANTIC_V2:
-            # Используем прямое обращение к методу родителя, чтобы избежать проблем
-            return PydanticBaseModel.model_validate(cls, obj)
+            return super().model_validate(obj, *args, **kwargs)
         if isinstance(obj, dict):
             return cls.parse_obj(obj)
         return cls.from_orm(obj)
