@@ -69,16 +69,20 @@ async def test_movie_category_routes_support_crud_and_cached_listing(monkeypatch
     try:
         async with AsyncClient(app=app, base_url="http://testserver") as client:
             list_response = await client.get("/v1/admin/movies/categories/?q=drama&offset=2&limit=5")
+            list_response_without_slash = await client.get("/v1/admin/movies/categories?q=drama&offset=2&limit=5")
             detail_response = await client.get(f"/v1/admin/movies/categories/{category_id}")
             create_response = await client.post("/v1/admin/movies/categories/", json={"name": "Drama"})
+            create_response_without_slash = await client.post("/v1/admin/movies/categories", json={"name": "Drama"})
             update_response = await client.patch(f"/v1/admin/movies/categories/{category_id}", json={"slug": "drama-updated"})
             delete_response = await client.delete(f"/v1/admin/movies/categories/{category_id}")
 
         assert list_response.status_code == 200
+        assert list_response_without_slash.status_code == 200
         assert list_response.json()["items"][0]["slug"] == "drama"
         assert detail_response.status_code == 200
         assert detail_response.json()["id"] == str(category_id)
         assert create_response.status_code == 201
+        assert create_response_without_slash.status_code == 201
         assert update_response.status_code == 200
         assert update_response.json()["slug"] == "drama-updated"
         assert delete_response.status_code == 204

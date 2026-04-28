@@ -42,6 +42,7 @@ async def _invalidate_movie_category_cache() -> None:
     await delete_cache_by_prefix("movies:public:")
 
 
+@router.get("", response_model=MovieCategoryPageResponse, include_in_schema=False)
 @router.get("/", response_model=MovieCategoryPageResponse)
 async def list_movie_categories(
     query: Optional[str] = Query(None, description="Search query"),
@@ -83,6 +84,7 @@ async def get_movie_category(
     return MovieCategoryResponse.model_validate(category)
 
 
+@router.post("", response_model=MovieCategoryResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=MovieCategoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_movie_category(
     category_data: MovieCategoryCreate,
