@@ -1,7 +1,9 @@
 from .base import BaseRepository
 from .actor import ActorRepository
 from .user import UserRepository
-from .movie import MovieRepository, MovieCategoryRepository
+from .content import ContentRepository, MovieCategoryRepository
+from .movie import MovieRepository
+from .series import SeriesRepository
 from .event import EventRepository, VenueRepository
 from .booking import BookingRepository
 from .favorite import FavoriteRepository
@@ -11,7 +13,9 @@ __all__ = [
     "BaseRepository",
     "ActorRepository",
     "UserRepository",
+    "ContentRepository",
     "MovieRepository", "MovieCategoryRepository",
+    "SeriesRepository",
     "EventRepository", "VenueRepository",
     "BookingRepository",
     "FavoriteRepository",

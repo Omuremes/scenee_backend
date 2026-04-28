@@ -45,10 +45,11 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+def _create_token(data: dict, token_type: str, expires_delta: timedelta) -> str:
     payload = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.utcnow() + expires_delta
     payload["exp"] = int(expire.timestamp())
+    payload["token_type"] = token_type
     header = {"alg": "HS256", "typ": "JWT"}
 
     encoded_header = _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
@@ -60,7 +61,23 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return f"{encoded_header}.{encoded_payload}.{encoded_signature}"
 
 
-def verify_access_token(token: str) -> dict:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    return _create_token(
+        data,
+        "access",
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+
+
+def create_refresh_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    return _create_token(
+        data,
+        "refresh",
+        expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+
+
+def verify_token(token: str, expected_type: str | None = None) -> dict:
     try:
         encoded_header, encoded_payload, encoded_signature = token.split(".")
         signing_input = f"{encoded_header}.{encoded_payload}".encode("utf-8")
@@ -74,9 +91,21 @@ def verify_access_token(token: str) -> dict:
         if exp is None or time.time() > exp:
             raise ValueError("Token has expired")
 
+        token_type = payload.get("token_type")
+        if expected_type and token_type != expected_type:
+            raise ValueError(f"Expected {expected_type} token")
+
         return payload
     except Exception as exc:
         raise ValueError(f"Invalid token: {str(exc)}")
+
+
+def verify_access_token(token: str) -> dict:
+    return verify_token(token, expected_type="access")
+
+
+def verify_refresh_token(token: str) -> dict:
+    return verify_token(token, expected_type="refresh")
 
 
 async def get_current_user(

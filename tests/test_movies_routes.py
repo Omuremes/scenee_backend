@@ -70,7 +70,7 @@ async def test_public_movies_returns_paginated_payload_and_sets_cache(monkeypatc
         captured_cache["expire"] = expire
         return True
 
-    async def fake_list_movies(self, query, category_id, is_series, skip, limit):
+    async def fake_list_movies(self, query, category_id, skip, limit):
         assert query == "arrival"
         assert skip == 10
         assert limit == 5
@@ -137,7 +137,7 @@ async def test_admin_movie_routes_support_list_detail_and_delete(monkeypatch):
     async def fake_admin_user():
         return SimpleNamespace(id=uuid4(), role="admin")
 
-    async def fake_list_movies(self, query, category_id, is_series, skip, limit):
+    async def fake_list_movies(self, query, category_id, skip, limit):
         return [movie], 1
 
     async def fake_get_movie_with_details(self, movie_id):
@@ -174,7 +174,149 @@ async def test_admin_movie_routes_support_list_detail_and_delete(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_public_movie_routes_expose_new_and_episodes(monkeypatch):
+async def test_admin_movie_create_uses_json_body_schema(monkeypatch):
+    movie = _build_movie()
+    captured = {}
+
+    async def fake_get_db():
+        yield object()
+
+    async def fake_admin_user():
+        return SimpleNamespace(id=uuid4(), role="admin")
+
+    async def fake_create_movie(self, movie_data, poster_payload=None):
+        captured["movie_name"] = movie_data.name
+        captured["poster"] = movie_data.poster
+        captured["poster_payload"] = poster_payload
+        return movie
+
+    async def fake_invalidate_cache():
+        return None
+
+    monkeypatch.setattr(MovieService, "create_movie", fake_create_movie)
+    monkeypatch.setattr(movies_router_module, "_invalidate_public_movie_cache", fake_invalidate_cache)
+    app.dependency_overrides[get_db] = fake_get_db
+    app.dependency_overrides[get_current_admin_user] = fake_admin_user
+
+    try:
+        async with AsyncClient(app=app, base_url="http://testserver") as client:
+            response = await client.post(
+                "/v1/admin/movies/",
+                json={
+                    "name": "Arrival",
+                    "description": "First contact",
+                    "duration": 116,
+                    "poster": "https://cdn.example.com/poster.jpg",
+                    "actors": [],
+                    "categories": [],
+                },
+            )
+
+        assert response.status_code == 201
+        assert response.json()["id"] == str(movie.id)
+        assert captured["movie_name"] == "Arrival"
+        assert captured["poster"] == "https://cdn.example.com/poster.jpg"
+        assert captured["poster_payload"]["url"] == "https://cdn.example.com/poster.jpg"
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_admin_movie_update_allows_clearing_poster_with_json_null(monkeypatch):
+    movie = _build_movie()
+    captured = {}
+
+    async def fake_get_db():
+        yield object()
+
+    async def fake_admin_user():
+        return SimpleNamespace(id=uuid4(), role="admin")
+
+    async def fake_update_movie(self, movie_id, movie_data, poster_payload=None, poster_provided=False):
+        captured["movie_id"] = movie_id
+        captured["poster"] = movie_data.poster
+        captured["poster_payload"] = poster_payload
+        captured["poster_provided"] = poster_provided
+        return movie
+
+    async def fake_invalidate_cache():
+        return None
+
+    monkeypatch.setattr(MovieService, "update_movie", fake_update_movie)
+    monkeypatch.setattr(movies_router_module, "_invalidate_public_movie_cache", fake_invalidate_cache)
+    app.dependency_overrides[get_db] = fake_get_db
+    app.dependency_overrides[get_current_admin_user] = fake_admin_user
+
+    try:
+        async with AsyncClient(app=app, base_url="http://testserver") as client:
+            response = await client.patch(
+                f"/v1/admin/movies/{movie.id}",
+                json={"poster": None},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(movie.id)
+        assert captured["movie_id"] == movie.id
+        assert captured["poster"] is None
+        assert captured["poster_payload"] is None
+        assert captured["poster_provided"] is True
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_admin_movie_poster_upload_uses_dedicated_endpoint(monkeypatch):
+    movie = _build_movie()
+    captured = {}
+
+    async def fake_get_db():
+        yield object()
+
+    async def fake_admin_user():
+        return SimpleNamespace(id=uuid4(), role="admin")
+
+    async def fake_upload_poster(upload_file):
+        captured["filename"] = upload_file.filename
+        return {
+            "url": "https://cdn.example.com/uploaded-poster.jpg",
+            "storage_path": "movies/uploaded-poster.jpg",
+            "is_primary": True,
+        }
+
+    async def fake_update_movie(self, movie_id, movie_data, poster_payload=None, poster_provided=False):
+        captured["movie_id"] = movie_id
+        captured["poster_payload"] = poster_payload
+        captured["poster_provided"] = poster_provided
+        return movie
+
+    async def fake_invalidate_cache():
+        return None
+
+    monkeypatch.setattr(movies_router_module, "_upload_poster", fake_upload_poster)
+    monkeypatch.setattr(MovieService, "update_movie", fake_update_movie)
+    monkeypatch.setattr(movies_router_module, "_invalidate_public_movie_cache", fake_invalidate_cache)
+    app.dependency_overrides[get_db] = fake_get_db
+    app.dependency_overrides[get_current_admin_user] = fake_admin_user
+
+    try:
+        async with AsyncClient(app=app, base_url="http://testserver") as client:
+            response = await client.post(
+                f"/v1/admin/movies/{movie.id}/poster",
+                files={"poster": ("poster.jpg", b"binary-poster", "image/jpeg")},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(movie.id)
+        assert captured["filename"] == "poster.jpg"
+        assert captured["movie_id"] == movie.id
+        assert captured["poster_payload"]["storage_path"] == "movies/uploaded-poster.jpg"
+        assert captured["poster_provided"] is True
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_public_movie_routes_expose_new_collection(monkeypatch):
     movie = _build_movie()
 
     async def fake_get_db():
@@ -196,7 +338,6 @@ async def test_public_movie_routes_expose_new_and_episodes(monkeypatch):
         return True
 
     monkeypatch.setattr(MovieService, "get_new_movies", fake_get_new_movies)
-    monkeypatch.setattr(MovieService, "get_season_episodes", fake_get_season_episodes)
     monkeypatch.setattr(movies_router_module, "get_cache", fake_get_cache)
     monkeypatch.setattr(movies_router_module, "set_cache", fake_set_cache)
     app.dependency_overrides[get_db] = fake_get_db
@@ -204,12 +345,8 @@ async def test_public_movie_routes_expose_new_and_episodes(monkeypatch):
     try:
         async with AsyncClient(app=app, base_url="http://testserver") as client:
             new_response = await client.get("/v1/movies/new?limit=3")
-            episodes_response = await client.get(f"/v1/movies/{movie.id}/seasons/1/episodes")
 
         assert new_response.status_code == 200
         assert new_response.json()[0]["id"] == str(movie.id)
-        assert episodes_response.status_code == 200
-        assert episodes_response.json()[0]["episode_number"] == 1
-        assert episodes_response.json()[0]["duration"] == 42
     finally:
         app.dependency_overrides.clear()

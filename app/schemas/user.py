@@ -32,6 +32,10 @@ class UserLogin(BaseSchema):
     password: str = Field(..., min_length=8, max_length=255)
 
 
+class RefreshTokenRequest(BaseSchema):
+    refresh_token: str = Field(..., min_length=1)
+
+
 class UserCreate(UserBase):
     firebase_uid: str = Field(..., max_length=128)
 
@@ -42,8 +46,10 @@ class UserUpdate(UserBase):
 
 class TokenResponse(BaseSchema):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+    refresh_expires_in: int
 
 
 class UserResponse(UserBase):

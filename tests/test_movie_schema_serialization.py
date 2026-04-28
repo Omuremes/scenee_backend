@@ -1,8 +1,11 @@
 from datetime import datetime
 from uuid import uuid4
 
+import pytest
+from pydantic import ValidationError
+
 from app.models.movie import Movie, Poster
-from app.schemas.movie import MovieResponse
+from app.schemas.movie import MovieCreate, MovieResponse
 
 
 def test_movie_response_preserves_stored_public_poster_urls():
@@ -32,3 +35,24 @@ def test_movie_response_preserves_stored_public_poster_urls():
     assert payload.posters[0].url == "http://192.168.68.150:9000/cinescope-media/posters/arrival.jpg"
     assert payload.primary_poster is not None
     assert payload.primary_poster.url == "http://192.168.68.150:9000/cinescope-media/posters/arrival.jpg"
+
+
+def test_movie_create_strips_and_validates_poster_url():
+    payload = MovieCreate(
+        name="Arrival",
+        poster="  https://cdn.example.com/poster.jpg  ",
+        actors=[],
+        categories=[],
+    )
+
+    assert payload.poster == "https://cdn.example.com/poster.jpg"
+
+
+def test_movie_create_rejects_blank_poster_url():
+    with pytest.raises(ValidationError, match="Poster URL cannot be empty"):
+        MovieCreate(
+            name="Arrival",
+            poster="   ",
+            actors=[],
+            categories=[],
+        )

@@ -110,28 +110,40 @@ class EpisodeResponse(EpisodeBase):
 class MovieBase(BaseSchema):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
-    is_series: bool = False
     duration: Optional[int] = Field(None, ge=1, description="Movie duration in minutes")
-    seasons_count: int = Field(default=1, ge=1)
 
 
 class MovieCreate(MovieBase):
     poster: Optional[str] = Field(None, max_length=1000, description="Poster URL when JSON payload is used")
     actors: List[UUID] = Field(default_factory=list)
     categories: List[UUID] = Field(default_factory=list)
-    episodes: List[EpisodeCreate] = Field(default_factory=list)
+
+    @validator("poster", pre=True, allow_reuse=True)
+    def normalize_poster_url(cls, value):
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Poster URL cannot be empty")
+        return to_public_url(normalized) or normalized
 
 
 class MovieUpdate(BaseSchema):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
-    is_series: Optional[bool] = None
     duration: Optional[int] = Field(None, ge=1, description="Movie duration in minutes")
-    seasons_count: Optional[int] = Field(None, ge=1)
     poster: Optional[str] = Field(None, max_length=1000, description="Poster URL when JSON payload is used")
     actors: Optional[List[UUID]] = None
     categories: Optional[List[UUID]] = None
-    episodes: Optional[List[EpisodeCreate]] = None
+
+    @validator("poster", pre=True, allow_reuse=True)
+    def normalize_poster_url(cls, value):
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Poster URL cannot be empty")
+        return to_public_url(normalized) or normalized
 
 
 class MovieResponse(MovieBase):
@@ -143,16 +155,13 @@ class MovieResponse(MovieBase):
     categories: List[MovieCategoryResponse] = Field(default_factory=list)
     actors: List[ActorResponse] = Field(default_factory=list)
     posters: List[PosterResponse] = Field(default_factory=list)
-    episodes: List[EpisodeResponse] = Field(default_factory=list)
     primary_poster: Optional[PosterResponse] = None
 
 
 class MovieListResponse(BaseSchema):
     id: UUID
     name: str
-    is_series: bool
     duration: Optional[int] = None
-    seasons_count: int
     average_rating: float
     category: Optional[MovieCategoryResponse] = None
     categories: List[MovieCategoryResponse] = Field(default_factory=list)

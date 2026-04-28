@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.database import get_db
-from app.core.security import get_current_user, verify_password
+from app.core.security import create_refresh_token, get_current_user, verify_password
 from app.main import app
 from app.routers import auth as auth_router
 from app.routers.bookings import BookingService
@@ -131,9 +131,72 @@ async def test_register_returns_access_token_and_user(monkeypatch):
     payload = response.json()
     assert payload["token_type"] == "bearer"
     assert payload["expires_in"] > 0
+    assert payload["refresh_expires_in"] > payload["expires_in"]
     assert payload["access_token"]
+    assert payload["refresh_token"]
     assert payload["user"]["email"] == "newuser@example.com"
     assert payload["user"]["role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_login_returns_not_found_for_missing_user(monkeypatch):
+    async def fake_get_user_by_email(self, email):
+        return None
+
+    async def fake_enforce_rate_limit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(UserService, "get_user_by_email", fake_get_user_by_email)
+    monkeypatch.setattr(auth_router, "enforce_rate_limit", fake_enforce_rate_limit)
+
+    async with AsyncClient(app=app, base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/auth/login",
+            json={
+                "email": "missing@example.com",
+                "password": "super-secret-pass",
+            },
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User with this email was not found"
+
+
+@pytest.mark.asyncio
+async def test_refresh_returns_new_token_pair(monkeypatch):
+    user = SimpleNamespace(
+        id=uuid4(),
+        email="user@example.com",
+        firebase_uid=None,
+        role="user",
+        username="tester",
+        avatar_url=None,
+        created_at=datetime.utcnow(),
+    )
+
+    async def fake_get_user_by_id(self, user_id):
+        return user if user_id == user.id else None
+
+    async def fake_enforce_rate_limit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(UserService, "get_user_by_id", fake_get_user_by_id)
+    monkeypatch.setattr(auth_router, "enforce_rate_limit", fake_enforce_rate_limit)
+
+    refresh_token = create_refresh_token({"sub": str(user.id), "role": user.role})
+
+    async with AsyncClient(app=app, base_url="http://testserver") as client:
+        response = await client.post(
+            "/v1/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["access_token"]
+    assert payload["refresh_token"]
+    assert payload["expires_in"] > 0
+    assert payload["refresh_expires_in"] > payload["expires_in"]
 
 
 @pytest.mark.asyncio

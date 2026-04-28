@@ -1,5 +1,5 @@
 from .base import BaseSchema
-from .user import UserBase, UserSync, UserRegister, UserLogin, UserCreate, UserUpdate, TokenResponse, UserResponse, RegisterResponse
+from .user import UserBase, UserSync, UserRegister, UserLogin, RefreshTokenRequest, UserCreate, UserUpdate, TokenResponse, UserResponse, RegisterResponse
 from .movie import (
     MovieCategoryBase, MovieCategoryCreate, MovieCategoryUpdate, MovieCategoryResponse, MovieCategoryPageResponse,
     ActorBase, ActorCreate, ActorUpdate, ActorResponse, ActorPageResponse,
@@ -7,6 +7,7 @@ from .movie import (
     EpisodeBase, EpisodeCreate, EpisodeUpdate, EpisodeResponse,
     MovieBase, MovieCreate, MovieUpdate, MovieResponse, MovieListResponse, MoviePageResponse
 )
+from .series import SeriesBase, SeriesCreate, SeriesUpdate, SeriesResponse, SeriesListResponse, SeriesPageResponse
 from .review import ReviewBase, ReviewCreate, ReviewUpdate, ReviewResponse, ReviewUserResponse
 from .event import EventType, VenueBase, VenueResponse, EventBase, EventCreate, EventUpdate, EventResponse, EventListResponse, EventPageResponse
 from .booking import BookingStatus, BookingBase, BookingCreate, BookingUpdate, BookingResponse
@@ -15,12 +16,13 @@ from .event_review import EventReviewBase, EventReviewCreate, EventReviewUpdate,
 
 __all__ = [
     "BaseSchema",
-    "UserBase", "UserSync", "UserRegister", "UserLogin", "UserCreate", "UserUpdate", "TokenResponse", "UserResponse", "RegisterResponse",
+    "UserBase", "UserSync", "UserRegister", "UserLogin", "RefreshTokenRequest", "UserCreate", "UserUpdate", "TokenResponse", "UserResponse", "RegisterResponse",
     "MovieCategoryBase", "MovieCategoryCreate", "MovieCategoryUpdate", "MovieCategoryResponse", "MovieCategoryPageResponse",
     "ActorBase", "ActorCreate", "ActorUpdate", "ActorResponse", "ActorPageResponse",
     "PosterBase", "PosterResponse",
     "EpisodeBase", "EpisodeCreate", "EpisodeUpdate", "EpisodeResponse",
     "MovieBase", "MovieCreate", "MovieUpdate", "MovieResponse", "MovieListResponse", "MoviePageResponse",
+    "SeriesBase", "SeriesCreate", "SeriesUpdate", "SeriesResponse", "SeriesListResponse", "SeriesPageResponse",
     "ReviewBase", "ReviewCreate", "ReviewUpdate", "ReviewResponse", "ReviewUserResponse",
     "EventType", "VenueBase", "VenueResponse", "EventBase", "EventCreate", "EventUpdate", "EventResponse", "EventListResponse", "EventPageResponse",
     "BookingStatus", "BookingBase", "BookingCreate", "BookingUpdate", "BookingResponse",

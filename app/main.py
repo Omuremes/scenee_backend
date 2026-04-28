@@ -6,12 +6,14 @@ from app.routers import (
     admin_actors_router,
     admin_movie_categories_router,
     admin_movies_router,
+    admin_series_router,
     actors_router,
     auth_router,
     bookings_router,
     events_router,
     favorites_router,
     movies_router,
+    series_router,
     reviews_router,
 )
 
@@ -36,6 +38,8 @@ app.include_router(admin_actors_router)
 app.include_router(admin_movie_categories_router)
 app.include_router(movies_router)
 app.include_router(admin_movies_router)
+app.include_router(series_router)
+app.include_router(admin_series_router)
 app.include_router(events_router)
 app.include_router(admin_events_router)
 app.include_router(bookings_router)

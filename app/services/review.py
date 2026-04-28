@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories import EventRepository, EventReviewRepository, MovieRepository, ReviewRepository
+from app.repositories import ContentRepository, EventRepository, EventReviewRepository, ReviewRepository
 from app.schemas import EventReviewCreate, EventReviewUpdate, ReviewCreate, ReviewUpdate
 from app.services.base import BaseService
 
@@ -19,7 +19,7 @@ class ReviewService(BaseService[ReviewRepository]):
     def __init__(self, db: AsyncSession):
         repository = ReviewRepository(db)
         super().__init__(repository)
-        self.movie_repository = MovieRepository(db)
+        self.movie_repository = ContentRepository(db)
 
     async def create_review(self, user_id: UUID, review_data: ReviewCreate):
         if not await self.movie_repository.exists(review_data.movie_id):

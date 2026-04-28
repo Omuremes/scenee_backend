@@ -84,7 +84,6 @@ async def test_movie_service_create_requires_existing_category(monkeypatch):
             MovieCreate(
                 name="New movie",
                 description="Description",
-                is_series=False,
                 duration=125,
                 categories=[uuid4()],
             )
@@ -103,11 +102,9 @@ async def test_movie_service_maps_duration_to_minutes_and_sets_single_season():
         MovieCreate(
             name="Arrival",
             description="First contact",
-            is_series=False,
             duration=116,
             actors=[],
             categories=[],
-            episodes=[],
         )
     )
 

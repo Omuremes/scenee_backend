@@ -1,16 +1,16 @@
 from datetime import timedelta
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import verify_firebase_token
 from app.core.rate_limit import enforce_rate_limit, get_client_identifier
-from app.core.security import create_access_token, get_current_user, security
+from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_refresh_token
 from app.models import User
-from app.schemas import RegisterResponse, TokenResponse, UserLogin, UserRegister, UserResponse, UserSync
+from app.schemas import RefreshTokenRequest, RegisterResponse, TokenResponse, UserLogin, UserRegister, UserResponse, UserSync
 from app.services import UserService
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -21,10 +21,16 @@ def _build_token_response(user: User) -> TokenResponse:
         {"sub": str(user.id), "role": user.role},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
+    refresh_token = create_refresh_token(
+        {"sub": str(user.id), "role": user.role},
+        expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+    )
     return TokenResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        refresh_expires_in=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
     )
 
 
@@ -47,8 +53,10 @@ async def register_user(
         token_response = _build_token_response(user)
         return RegisterResponse(
             access_token=token_response.access_token,
+            refresh_token=token_response.refresh_token,
             token_type=token_response.token_type,
             expires_in=token_response.expires_in,
+            refresh_expires_in=token_response.refresh_expires_in,
             user=UserResponse.model_validate(user),
         )
     except ValueError as exc:
@@ -72,11 +80,69 @@ async def login_user(
     )
 
     user_service = UserService(db)
+    existing_user = await user_service.get_user_by_email(login_data.email)
+    if not existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with this email was not found",
+        )
+
     user = await user_service.authenticate_user(login_data.email, login_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Invalid password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return _build_token_response(user)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_access_token(
+    payload: RefreshTokenRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await enforce_rate_limit(
+        "auth:refresh",
+        get_client_identifier(request),
+        limit=30,
+        window_seconds=60,
+    )
+
+    try:
+        token_payload = verify_refresh_token(payload.refresh_token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = token_payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token payload missing subject",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        user_id = UUID(user_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID in token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_service = UserService(db)
+    user = await user_service.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

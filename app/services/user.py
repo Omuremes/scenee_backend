@@ -53,6 +53,12 @@ class UserService(BaseService[UserRepository]):
             return None
         return user
 
+    async def get_user_by_email(self, email: str):
+        normalized_email = self._normalize_email(email)
+        if not normalized_email:
+            return None
+        return await self.repository.get_by_email(normalized_email)
+
     async def get_or_create_user(
         self,
         firebase_uid: str,
