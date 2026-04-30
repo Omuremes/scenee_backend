@@ -14,7 +14,15 @@ from .serial import (
     SerialBase, SerialCreate, SerialUpdate, SerialResponse, SerialListResponse, SerialPageResponse
 )
 from .review import ReviewBase, ReviewCreate, ReviewUpdate, ReviewResponse, ReviewUserResponse
-from .event import EventType, VenueBase, VenueResponse, EventBase, EventCreate, EventUpdate, EventResponse, EventListResponse, EventPageResponse
+from .event import (
+    EventType, SessionPricingType,
+    VenueBase, VenueResponse,
+    EventCategoryBase, EventCategoryCreate, EventCategoryUpdate, EventCategoryResponse, EventCategoryPageResponse,
+    EventSeatBase, EventSeatCreate, EventSeatUpdate, EventSeatResponse,
+    EventSessionBase, EventSessionCreate, EventSessionUpdate, EventSessionResponse,
+    EventBase, EventCreate, EventUpdate, EventResponse, EventListResponse, EventPageResponse,
+    EventReviewsSummaryResponse,
+)
 from .booking import BookingStatus, BookingBase, BookingCreate, BookingUpdate, BookingResponse
 from .favorite import FavoriteBase, FavoriteCreate, FavoriteResponse
 from .event_review import EventReviewBase, EventReviewCreate, EventReviewUpdate, EventReviewResponse
@@ -29,7 +37,13 @@ __all__ = [
     "MovieBase", "MovieCreate", "MovieUpdate", "MovieResponse", "MovieListResponse", "MoviePageResponse",
     "SeriesBase", "SeriesCreate", "SeriesUpdate", "SeriesResponse", "SeriesListResponse", "SeriesPageResponse",
     "ReviewBase", "ReviewCreate", "ReviewUpdate", "ReviewResponse", "ReviewUserResponse",
-    "EventType", "VenueBase", "VenueResponse", "EventBase", "EventCreate", "EventUpdate", "EventResponse", "EventListResponse", "EventPageResponse",
+    "EventType", "SessionPricingType",
+    "VenueBase", "VenueResponse",
+    "EventCategoryBase", "EventCategoryCreate", "EventCategoryUpdate", "EventCategoryResponse", "EventCategoryPageResponse",
+    "EventSeatBase", "EventSeatCreate", "EventSeatUpdate", "EventSeatResponse",
+    "EventSessionBase", "EventSessionCreate", "EventSessionUpdate", "EventSessionResponse",
+    "EventBase", "EventCreate", "EventUpdate", "EventResponse", "EventListResponse", "EventPageResponse",
+    "EventReviewsSummaryResponse",
     "BookingStatus", "BookingBase", "BookingCreate", "BookingUpdate", "BookingResponse",
     "FavoriteBase", "FavoriteCreate", "FavoriteResponse",
     "EventReviewBase", "EventReviewCreate", "EventReviewUpdate", "EventReviewResponse",

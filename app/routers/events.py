@@ -8,8 +8,28 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_admin_user
 from app.models import User
-from app.schemas import EventCreate, EventListResponse, EventPageResponse, EventResponse, EventType, EventUpdate
-from app.services import EventService
+from app.schemas import (
+    EventCategoryCreate,
+    EventCategoryPageResponse,
+    EventCategoryResponse,
+    EventCategoryUpdate,
+    EventCreate,
+    EventListResponse,
+    EventPageResponse,
+    EventReviewResponse,
+    EventReviewsSummaryResponse,
+    EventResponse,
+    EventSeatCreate,
+    EventSeatResponse,
+    EventSeatUpdate,
+    EventSessionCreate,
+    EventSessionResponse,
+    EventSessionUpdate,
+    EventType,
+    EventUpdate,
+)
+from app.schemas.event import normalize_event_type
+from app.services import EventCategoryService, EventReviewService, EventService
 
 public_router = APIRouter(prefix="/v1/events", tags=["events"])
 admin_router = APIRouter(prefix="/v1admin/events", tags=["admin-events"])
@@ -19,22 +39,68 @@ def _resolve_offset(offset: int, skip: Optional[int]) -> int:
     return skip if skip is not None else offset
 
 
+def _to_event_list_response(event) -> EventListResponse:
+    upcoming_sessions = sorted(getattr(event, "sessions", []) or [], key=lambda item: item.starts_at)
+    next_session = upcoming_sessions[0] if upcoming_sessions else None
+    min_price = min((session.base_price for session in upcoming_sessions), default=getattr(event, "price", None))
+
+    return EventListResponse(
+        id=event.id,
+        title=event.title,
+        type=event.type,
+        event_type=event.event_type or event.type,
+        poster_url=event.poster_url or event.image_url,
+        image_url=event.image_url or event.poster_url,
+        city=event.city,
+        category=EventCategoryResponse.model_validate(event.category) if event.category else None,
+        next_session_at=next_session.starts_at if next_session else getattr(event, "start_datetime", None),
+        min_price=min_price,
+        average_rating=event.average_rating,
+        is_active=event.is_active,
+        start_datetime=getattr(event, "start_datetime", None),
+        venue=event.venue,
+        price=getattr(event, "price", None),
+        available_seats=getattr(event, "available_seats", None),
+    )
+
+
+def _normalize_type_filter(type_filter: Optional[EventType], event_type: Optional[EventType]) -> Optional[str]:
+    selected = type_filter or event_type
+    return normalize_event_type(selected.value) if selected else None
+
+
 @public_router.get("/", response_model=list[EventListResponse])
 async def get_events(
     city: Optional[str] = Query(None, description="Filter by city"),
-    event_type: Optional[EventType] = Query(None, description="Filter by event type"),
+    type_filter: Optional[EventType] = Query(None, alias="type", description="Filter by event type"),
+    event_type: Optional[EventType] = Query(None, description="Deprecated alias for type"),
+    category_id: Optional[UUID] = Query(None, description="Filter by category id"),
+    category: Optional[str] = Query(None, description="Filter by category slug"),
     skip: int = Query(0, ge=0),
     limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
 ):
     event_service = EventService(db)
     events = await event_service.get_upcoming_events(
-        city,
-        event_type.value if event_type else None,
-        skip,
-        limit,
+        city=city,
+        event_type=_normalize_type_filter(type_filter, event_type),
+        category_id=category_id,
+        category_slug=category,
+        skip=skip,
+        limit=limit,
     )
-    return [EventListResponse.model_validate(event) for event in events]
+    return [_to_event_list_response(event) for event in events]
+
+
+@public_router.get("/sessions/{session_id}/seats", response_model=list[EventSeatResponse])
+async def get_session_seats(
+    session_id: UUID,
+    only_available: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    seats = await event_service.get_session_seats(session_id, only_available=only_available)
+    return [EventSeatResponse.model_validate(seat) for seat in seats]
 
 
 @public_router.get("/{event_id}", response_model=EventResponse)
@@ -44,13 +110,202 @@ async def get_event(
 ):
     event_service = EventService(db)
     event = await event_service.get_event_with_details(event_id)
-    if not event:
+    if not event or not event.is_active:
         raise HTTPException(status_code=404, detail="Event not found")
     return EventResponse.model_validate(event)
 
 
+@public_router.get("/{event_id}/seats", response_model=list[EventSeatResponse])
+async def get_event_seats(
+    event_id: UUID,
+    session_id: Optional[UUID] = Query(None),
+    only_available: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    event = await event_service.get_event_with_details(event_id)
+    if not event or not event.is_active:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if session_id:
+        seats = await event_service.get_session_seats(session_id, only_available=only_available)
+        return [EventSeatResponse.model_validate(seat) for seat in seats]
+
+    responses = []
+    for session in event.sessions:
+        for seat in session.seats:
+            if not only_available or seat.is_available:
+                responses.append(EventSeatResponse.model_validate(seat))
+    return responses
+
+
+@public_router.get("/{event_id}/reviews", response_model=list[EventReviewResponse])
+async def get_cinema_event_reviews(
+    event_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    event = await event_service.get_event_with_details(event_id)
+    if not event or not event.is_active:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.type != "cinema":
+        raise HTTPException(status_code=400, detail="Reviews are only available for cinema events")
+
+    review_service = EventReviewService(db)
+    reviews = await review_service.get_event_reviews(event_id, skip, limit)
+    return [EventReviewResponse.model_validate(review) for review in reviews]
+
+
+@public_router.get("/{event_id}/reviews/summary", response_model=EventReviewsSummaryResponse)
+async def get_cinema_event_reviews_summary(
+    event_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    event = await event_service.get_event_with_details(event_id)
+    if not event or not event.is_active:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.type != "cinema":
+        raise HTTPException(status_code=400, detail="Reviews are only available for cinema events")
+    return EventReviewsSummaryResponse(
+        average_rating=event.average_rating,
+        reviews_count=len(event.reviews or []),
+    )
+
+
+@admin_router.get("/categories", response_model=EventCategoryPageResponse)
+async def list_event_categories(
+    query: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, description="Alias for query"),
+    offset: int = Query(0, ge=0),
+    skip: Optional[int] = Query(None, ge=0, description="Deprecated alias for offset"),
+    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    category_service = EventCategoryService(db)
+    resolved_query = q if q is not None else query
+    resolved_offset = _resolve_offset(offset, skip)
+    items, total = await category_service.list_categories(
+        query=resolved_query,
+        skip=resolved_offset,
+        limit=limit,
+    )
+    return EventCategoryPageResponse(
+        items=[EventCategoryResponse.model_validate(item) for item in items],
+        total=total,
+        offset=resolved_offset,
+        limit=limit,
+        has_more=resolved_offset + limit < total,
+    )
+
+
+@admin_router.post("/categories", response_model=EventCategoryResponse, status_code=status.HTTP_201_CREATED)
+async def create_event_category(
+    category_data: EventCategoryCreate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    category_service = EventCategoryService(db)
+    try:
+        category = await category_service.create_category(category_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return EventCategoryResponse.model_validate(category)
+
+
+@admin_router.patch("/categories/{category_id}", response_model=EventCategoryResponse)
+async def update_event_category(
+    category_id: UUID,
+    category_data: EventCategoryUpdate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    category_service = EventCategoryService(db)
+    try:
+        category = await category_service.update_category(category_id, category_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not category:
+        raise HTTPException(status_code=404, detail="Event category not found")
+    return EventCategoryResponse.model_validate(category)
+
+
+@admin_router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event_category(
+    category_id: UUID,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    category_service = EventCategoryService(db)
+    deleted = await category_service.delete(category_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Event category not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@admin_router.get("/sessions/{session_id}/seats", response_model=list[EventSeatResponse])
+async def admin_get_session_seats(
+    session_id: UUID,
+    only_available: bool = Query(False),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    seats = await event_service.get_session_seats(session_id, only_available=only_available)
+    return [EventSeatResponse.model_validate(seat) for seat in seats]
+
+
+@admin_router.post("/sessions/{session_id}/seats", response_model=EventSeatResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_seat(
+    session_id: UUID,
+    seat_data: EventSeatCreate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    try:
+        seat = await event_service.create_seat(session_id, seat_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return EventSeatResponse.model_validate(seat)
+
+
+@admin_router.patch("/seats/{seat_id}", response_model=EventSeatResponse)
+async def admin_update_seat(
+    seat_id: UUID,
+    seat_data: EventSeatUpdate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    seat = await event_service.update_seat(seat_id, seat_data)
+    if not seat:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    return EventSeatResponse.model_validate(seat)
+
+
+@admin_router.delete("/seats/{seat_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_seat(
+    seat_id: UUID,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    deleted = await event_service.delete_seat(seat_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @admin_router.get("/", response_model=EventPageResponse)
 async def admin_get_events(
+    type_filter: Optional[EventType] = Query(None, alias="type"),
+    event_type: Optional[EventType] = Query(None, description="Deprecated alias for type"),
+    city: Optional[str] = Query(None),
+    category_id: Optional[UUID] = Query(None),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     skip: Optional[int] = Query(None, ge=0, description="Deprecated alias for offset"),
     limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
@@ -59,14 +314,87 @@ async def admin_get_events(
 ):
     resolved_offset = _resolve_offset(offset, skip)
     event_service = EventService(db)
-    events, total = await event_service.list_events(resolved_offset, limit)
+    events, total = await event_service.list_events(
+        event_type=_normalize_type_filter(type_filter, event_type),
+        city=city,
+        category_id=category_id,
+        skip=resolved_offset,
+        limit=limit,
+    )
     return EventPageResponse(
-        items=[EventListResponse.model_validate(event) for event in events],
+        items=[_to_event_list_response(event) for event in events],
         total=total,
         offset=resolved_offset,
         limit=limit,
         has_more=resolved_offset + limit < total,
     )
+
+
+@admin_router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
+async def create_event(
+    event_data: EventCreate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    try:
+        event = await event_service.create_event(event_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return EventResponse.model_validate(event)
+
+
+@admin_router.get("/{event_id}/sessions", response_model=list[EventSessionResponse])
+async def admin_get_event_sessions(
+    event_id: UUID,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    sessions = await event_service.get_event_sessions(event_id)
+    return [EventSessionResponse.model_validate(session) for session in sessions]
+
+
+@admin_router.post("/{event_id}/sessions", response_model=EventSessionResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_session(
+    event_id: UUID,
+    session_data: EventSessionCreate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    try:
+        session = await event_service.create_session(event_id, session_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return EventSessionResponse.model_validate(session)
+
+
+@admin_router.patch("/sessions/{session_id}", response_model=EventSessionResponse)
+async def admin_update_session(
+    session_id: UUID,
+    session_data: EventSessionUpdate,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    session = await event_service.update_session(session_id, session_data)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return EventSessionResponse.model_validate(session)
+
+
+@admin_router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_session(
+    session_id: UUID,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    deleted = await event_service.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @admin_router.get("/{event_id}", response_model=EventResponse)
@@ -82,18 +410,8 @@ async def admin_get_event(
     return EventResponse.model_validate(event)
 
 
-@admin_router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
-async def create_event(
-    event_data: EventCreate,
-    _current_admin: User = Depends(get_current_admin_user),
-    db: AsyncSession = Depends(get_db),
-):
-    event_service = EventService(db)
-    event = await event_service.create_event(event_data)
-    return EventResponse.model_validate(event)
-
-
 @admin_router.put("/{event_id}", response_model=EventResponse)
+@admin_router.patch("/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: UUID,
     event_data: EventUpdate,
@@ -101,7 +419,24 @@ async def update_event(
     db: AsyncSession = Depends(get_db),
 ):
     event_service = EventService(db)
-    event = await event_service.update_event(event_id, event_data)
+    try:
+        event = await event_service.update_event(event_id, event_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return EventResponse.model_validate(event)
+
+
+@admin_router.patch("/{event_id}/status", response_model=EventResponse)
+async def update_event_status(
+    event_id: UUID,
+    is_active: bool,
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    event = await event_service.set_active(event_id, is_active)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     return EventResponse.model_validate(event)

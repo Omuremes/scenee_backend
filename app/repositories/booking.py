@@ -15,7 +15,9 @@ class BookingRepository(BaseRepository[Booking]):
         result = await self.db.execute(
             select(Booking)
             .options(
-                selectinload(Booking.event).selectinload(Event.venue)
+                selectinload(Booking.event).selectinload(Event.venue),
+                selectinload(Booking.session),
+                selectinload(Booking.seat),
             )
             .where(Booking.user_id == user_id)
             .order_by(Booking.created_at.desc())

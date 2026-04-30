@@ -4,7 +4,7 @@ from .user import UserRepository
 from .content import ContentRepository, MovieCategoryRepository
 from .movie import MovieRepository
 from .series import SeriesRepository
-from .event import EventRepository, VenueRepository
+from .event import EventCategoryRepository, EventRepository, EventSeatRepository, EventSessionRepository, VenueRepository
 from .booking import BookingRepository
 from .favorite import FavoriteRepository
 from .review import ReviewRepository, EventReviewRepository
@@ -16,7 +16,7 @@ __all__ = [
     "ContentRepository",
     "MovieRepository", "MovieCategoryRepository",
     "SeriesRepository",
-    "EventRepository", "VenueRepository",
+    "EventCategoryRepository", "EventRepository", "EventSeatRepository", "EventSessionRepository", "VenueRepository",
     "BookingRepository",
     "FavoriteRepository",
     "ReviewRepository", "EventReviewRepository",
