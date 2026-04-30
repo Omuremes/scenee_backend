@@ -1,7 +1,7 @@
 from app.models.user import User
 from app.models.movie import Movie, MovieCategory, Actor, Poster, Episode, movie_actors, movie_category_links
 from app.models.review import Review
-from app.models.event import Event, Venue
+from app.models.event import Event, EventCategory, EventSession, EventSeat, Venue
 from app.models.booking import Booking
 from app.models.favorite import Favorite
 from app.models.event_review import EventReview
@@ -11,7 +11,7 @@ __all__ = [
     "User", "Movie", "MovieCategory",
     "Actor", "Poster", "Episode",
     "movie_actors", "movie_category_links", "Review",
-    "Event", "Venue",
+    "Event", "EventCategory", "EventSession", "EventSeat", "Venue",
     "Booking",
     "Favorite",
     "EventReview",

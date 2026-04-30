@@ -68,8 +68,11 @@ class EventReviewService(BaseService[EventReviewRepository]):
         self.event_repository = EventRepository(db)
 
     async def create_event_review(self, user_id: UUID, review_data: EventReviewCreate):
-        if not await self.event_repository.exists(review_data.event_id):
+        event = await self.event_repository.get_by_id(review_data.event_id)
+        if not event:
             raise ValueError("Event not found")
+        if event.type != "cinema":
+            raise ValueError("Reviews are only available for cinema events")
 
         if await self.repository.get_by_event_and_user(review_data.event_id, user_id):
             raise ValueError("User has already reviewed this event")

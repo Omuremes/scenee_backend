@@ -14,6 +14,8 @@ class BookingStatus(str, Enum):
 
 class BookingBase(BaseSchema):
     event_id: UUID
+    session_id: Optional[UUID] = None
+    seat_id: Optional[UUID] = None
     seats_count: int = Field(..., ge=1)
 
 

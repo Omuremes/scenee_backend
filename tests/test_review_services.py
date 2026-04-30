@@ -73,11 +73,17 @@ class FakeEventReviewRepository:
 
 
 class FakeEventExistsRepository:
-    def __init__(self, exists=True):
+    def __init__(self, exists=True, event_type="cinema"):
         self._exists = exists
+        self._event_type = event_type
 
     async def exists(self, item_id):
         return self._exists
+
+    async def get_by_id(self, item_id):
+        if not self._exists:
+            return None
+        return SimpleNamespace(id=item_id, type=self._event_type)
 
 
 @pytest.mark.asyncio
@@ -104,6 +110,19 @@ async def test_create_event_review_requires_existing_event():
     service.event_repository = FakeEventExistsRepository(exists=False)
 
     with pytest.raises(ValueError, match="Event not found"):
+        await service.create_event_review(
+            uuid4(),
+            EventReviewCreate(event_id=uuid4(), rating=9.0, text="Great"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_event_review_requires_cinema_event():
+    service = object.__new__(EventReviewService)
+    service.repository = FakeEventReviewRepository()
+    service.event_repository = FakeEventExistsRepository(exists=True, event_type="concerts")
+
+    with pytest.raises(ValueError, match="only available for cinema"):
         await service.create_event_review(
             uuid4(),
             EventReviewCreate(event_id=uuid4(), rating=9.0, text="Great"),
