@@ -3,6 +3,7 @@ from .actor import ActorService
 from .user import UserService
 from .movie import MovieService, MovieCategoryService
 from .series import SeriesService
+from .serial import SerialService
 from .event import EventService, VenueService
 from .booking import BookingService
 from .favorite import FavoriteService
@@ -14,6 +15,7 @@ __all__ = [
     "UserService",
     "MovieService", "MovieCategoryService",
     "SeriesService",
+    "SerialService",
     "EventService", "VenueService",
     "BookingService",
     "FavoriteService",

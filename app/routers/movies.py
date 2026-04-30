@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status, Request, Form
 from fastapi.encoders import jsonable_encoder
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import delete_cache_by_prefix, get_cache, set_cache
@@ -48,29 +49,7 @@ async def _invalidate_public_movie_cache() -> None:
     await delete_cache_by_prefix(PUBLIC_MOVIE_CACHE_PREFIX)
 
 
-async def _upload_poster(poster_file: UploadFile) -> dict:
-    suffix = Path(poster_file.filename or "poster").suffix or ".bin"
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            temp_file.write(await poster_file.read())
-            temp_path = temp_file.name
 
-        object_name = f"movies/{uuid4()}{suffix}"
-        poster_url = await upload_file(
-            settings.MINIO_BUCKET_NAME,
-            object_name,
-            temp_path,
-            content_type=poster_file.content_type or "application/octet-stream",
-        )
-        return {
-            "url": poster_url,
-            "storage_path": object_name,
-            "is_primary": True,
-        }
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.unlink(temp_path)
 
 
 def _poster_from_url(url: str) -> dict:
@@ -234,10 +213,12 @@ async def create_movie(
     _current_admin: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    poster_payload = _poster_payload_from_value(movie_data.poster)
     movie_service = MovieService(db)
+    
+    # We no longer handle `poster` from MovieCreate, it's deprecated or just ignored,
+    # because they will upload via the /poster endpoint.
     try:
-        movie = await movie_service.create_movie(movie_data, poster_payload=poster_payload)
+        movie = await movie_service.create_movie(movie_data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -285,7 +266,24 @@ async def upload_movie_poster(
     _current_admin: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    poster_payload = await _upload_poster(poster)
+    if poster.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(status_code=400, detail="Invalid poster format. Use image/jpeg or image/png")
+        
+    suffix = Path(poster.filename).suffix or ".jpg"
+    poster_key = f"movies/{movie_id}/poster{suffix}"
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await poster.read())
+        temp_path = temp_file.name
+        
+    try:
+        await upload_file("posters", poster_key, temp_path, content_type=poster.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    poster_payload = {"storage_path": poster_key, "url": "", "is_primary": True}
+    
     movie_service = MovieService(db)
     movie = await movie_service.update_movie(
         movie_id,
@@ -299,6 +297,42 @@ async def upload_movie_poster(
     await _invalidate_public_movie_cache()
     return MovieResponse.model_validate(movie)
 
+
+@admin_router.post(
+    "/{movie_id}/video",
+    response_model=MovieResponse,
+)
+async def upload_movie_video(
+    movie_id: UUID,
+    video_file: UploadFile = File(...),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if video_file.content_type not in ["video/mp4", "video/x-matroska"]:
+        raise HTTPException(status_code=400, detail="Invalid video format. Use video/mp4 or video/x-matroska")
+        
+    suffix = Path(video_file.filename).suffix or ".mp4"
+    video_key = f"movies/{movie_id}/video{suffix}"
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await video_file.read())
+        temp_path = temp_file.name
+        
+    try:
+        await upload_file("movies", video_key, temp_path, content_type=video_file.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    movie_service = MovieService(db)
+    movie = await movie_service.repository.get_with_details(movie_id)
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+        
+    movie = await movie_service.repository.update_movie_with_relations(movie_id, {"video_file_key": video_key})
+    
+    await _invalidate_public_movie_cache()
+    return MovieResponse.model_validate(movie)
 
 @admin_router.delete("/{movie_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_movie(

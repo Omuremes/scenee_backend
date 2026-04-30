@@ -111,6 +111,8 @@ class MovieBase(BaseSchema):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None
     duration: Optional[int] = Field(None, ge=1, description="Movie duration in minutes")
+    poster_key: Optional[str] = None
+    video_file_key: Optional[str] = None
 
 
 class MovieCreate(MovieBase):
@@ -154,8 +156,8 @@ class MovieResponse(MovieBase):
     category: Optional[MovieCategoryResponse] = None
     categories: List[MovieCategoryResponse] = Field(default_factory=list)
     actors: List[ActorResponse] = Field(default_factory=list)
-    posters: List[PosterResponse] = Field(default_factory=list)
-    primary_poster: Optional[PosterResponse] = None
+    poster_url: Optional[str] = None
+    video_url: Optional[str] = None
 
 
 class MovieListResponse(BaseSchema):
@@ -165,7 +167,7 @@ class MovieListResponse(BaseSchema):
     average_rating: float
     category: Optional[MovieCategoryResponse] = None
     categories: List[MovieCategoryResponse] = Field(default_factory=list)
-    primary_poster: Optional[PosterResponse] = None
+    poster_url: Optional[str] = None
     created_at: datetime
 
 

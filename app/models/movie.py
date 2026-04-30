@@ -68,6 +68,8 @@ class Movie(Base):
     seasons_count = Column(Integer, default=1, nullable=False)
     average_rating = Column(Float, default=0.0, nullable=False)
     category_id = Column(UUID(as_uuid=True), ForeignKey("movie_categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    poster_key = Column(String(1000), nullable=True)
+    video_file_key = Column(String(1000), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -89,11 +91,19 @@ class Movie(Base):
         return self.duration_minutes
 
     @property
-    def primary_poster(self):
-        for poster in self.posters:
-            if poster.is_primary:
-                return poster
-        return self.posters[0] if self.posters else None
+    def poster_url(self):
+        from app.core.minio import get_presigned_url_sync
+        if self.poster_key:
+            return get_presigned_url_sync("posters", self.poster_key, expires=3600)
+        return None
+
+    @property
+    def video_url(self):
+        from app.core.minio import get_presigned_url_sync
+        if self.video_file_key:
+            return get_presigned_url_sync("movies", self.video_file_key, expires=3600)
+        return None
+
 
 
 class Poster(Base):

@@ -1,6 +1,7 @@
 from minio import Minio
 from minio.error import S3Error
 from urllib.parse import urlsplit, urlunsplit
+from datetime import timedelta
 
 from app.core.config import settings
 
@@ -108,8 +109,14 @@ async def get_presigned_url(bucket_name: str, object_name: str, expires: int = 3
     """
     Получить presigned URL для скачивания файла
     """
+    return get_presigned_url_sync(bucket_name, object_name, expires)
+
+def get_presigned_url_sync(bucket_name: str, object_name: str, expires: int = 3600) -> str:
+    """
+    Получить presigned URL для скачивания файла синхронно
+    """
     try:
-        url = minio_client.presigned_get_object(bucket_name, object_name, expires=expires)
+        url = minio_client.presigned_get_object(bucket_name, object_name, expires=timedelta(seconds=expires))
         return url
     except S3Error as e:
         raise ValueError(f"Failed to generate presigned URL: {str(e)}")

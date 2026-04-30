@@ -26,12 +26,27 @@ class MovieService(BaseContentService):
     async def get_new_movies(self, limit: int = 10):
         return await self.get_new_content(limit)
 
-    async def create_movie(self, movie_data: MovieCreate, poster_payload: Optional[dict] = None):
+    async def create_movie(
+        self, 
+        movie_data: MovieCreate, 
+        poster_payload: Optional[dict] = None,
+        movie_id: Optional[UUID] = None,
+        poster_key: Optional[str] = None,
+        video_file_key: Optional[str] = None
+    ):
         actor_ids = self._dedupe_ids(movie_data.actors)
         category_ids = self._dedupe_ids(movie_data.categories)
         actors = await self._validate_actor_ids(actor_ids)
         categories = await self._validate_category_ids(category_ids)
         payload = self._build_content_payload(movie_data)
+        
+        if movie_id:
+            payload["id"] = movie_id
+        if poster_key:
+            payload["poster_key"] = poster_key
+        if video_file_key:
+            payload["video_file_key"] = video_file_key
+            
         movie = await self.repository.create_movie(
             payload,
             actors=actors,
@@ -64,6 +79,8 @@ class MovieService(BaseContentService):
             return current_movie
 
         payload = self._build_content_payload(update_data, partial=True)
+        if poster_provided and poster_payload and "storage_path" in poster_payload:
+            payload["poster_key"] = poster_payload["storage_path"]
 
         movie = await self.repository.update_movie_with_relations(
             movie_id,

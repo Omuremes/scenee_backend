@@ -22,7 +22,6 @@ class BaseContentRepository(BaseRepository[Movie]):
             selectinload(Movie.category),
             selectinload(Movie.categories),
             selectinload(Movie.actors),
-            selectinload(Movie.posters),
             selectinload(Movie.episodes),
             selectinload(Movie.reviews),
         )
@@ -96,7 +95,6 @@ class BaseContentRepository(BaseRepository[Movie]):
             .options(
                 selectinload(Movie.category),
                 selectinload(Movie.categories),
-                selectinload(Movie.posters),
             )
             .order_by(Movie.created_at.desc(), Movie.average_rating.desc(), Movie.id.desc())
         )
@@ -125,7 +123,7 @@ class BaseContentRepository(BaseRepository[Movie]):
         result = await self.db.execute(
             self._apply_type_filter(select(Movie))
             .outerjoin(review_counts, review_counts.c.movie_id == Movie.id)
-            .options(selectinload(Movie.category), selectinload(Movie.categories), selectinload(Movie.posters))
+            .options(selectinload(Movie.category), selectinload(Movie.categories))
             .order_by(
                 Movie.average_rating.desc(),
                 desc(func.coalesce(review_counts.c.review_count, 0)),
@@ -147,7 +145,7 @@ class BaseContentRepository(BaseRepository[Movie]):
         result = await self.db.execute(
             self._apply_type_filter(select(Movie))
             .outerjoin(review_counts, review_counts.c.movie_id == Movie.id)
-            .options(selectinload(Movie.category), selectinload(Movie.categories), selectinload(Movie.posters))
+            .options(selectinload(Movie.category), selectinload(Movie.categories))
             .order_by(
                 freshness_rank.desc(),
                 Movie.created_at.desc(),

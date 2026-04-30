@@ -8,6 +8,11 @@ from .movie import (
     MovieBase, MovieCreate, MovieUpdate, MovieResponse, MovieListResponse, MoviePageResponse
 )
 from .series import SeriesBase, SeriesCreate, SeriesUpdate, SeriesResponse, SeriesListResponse, SeriesPageResponse
+from .serial import (
+    EpisodeFileBase, EpisodeFileResponse, SerialEpisodeBase, SerialEpisodeCreate, SerialEpisodeUpdate, SerialEpisodeResponse,
+    SeasonBase, SeasonCreate, SeasonUpdate, SeasonResponse,
+    SerialBase, SerialCreate, SerialUpdate, SerialResponse, SerialListResponse, SerialPageResponse
+)
 from .review import ReviewBase, ReviewCreate, ReviewUpdate, ReviewResponse, ReviewUserResponse
 from .event import EventType, VenueBase, VenueResponse, EventBase, EventCreate, EventUpdate, EventResponse, EventListResponse, EventPageResponse
 from .booking import BookingStatus, BookingBase, BookingCreate, BookingUpdate, BookingResponse
@@ -28,4 +33,7 @@ __all__ = [
     "BookingStatus", "BookingBase", "BookingCreate", "BookingUpdate", "BookingResponse",
     "FavoriteBase", "FavoriteCreate", "FavoriteResponse",
     "EventReviewBase", "EventReviewCreate", "EventReviewUpdate", "EventReviewResponse",
+    "EpisodeFileBase", "EpisodeFileResponse", "SerialEpisodeBase", "SerialEpisodeCreate", "SerialEpisodeUpdate", "SerialEpisodeResponse",
+    "SeasonBase", "SeasonCreate", "SeasonUpdate", "SeasonResponse",
+    "SerialBase", "SerialCreate", "SerialUpdate", "SerialResponse", "SerialListResponse", "SerialPageResponse",
 ]

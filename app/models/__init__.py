@@ -5,6 +5,7 @@ from app.models.event import Event, Venue
 from app.models.booking import Booking
 from app.models.favorite import Favorite
 from app.models.event_review import EventReview
+from app.models.serial import Serial, Season, SerialEpisode, EpisodeFile
 
 __all__ = [
     "User", "Movie", "MovieCategory",
@@ -14,4 +15,5 @@ __all__ = [
     "Booking",
     "Favorite",
     "EventReview",
+    "Serial", "Season", "SerialEpisode", "EpisodeFile",
 ]
