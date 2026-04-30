@@ -49,7 +49,24 @@ async def _invalidate_public_movie_cache() -> None:
     await delete_cache_by_prefix(PUBLIC_MOVIE_CACHE_PREFIX)
 
 
+async def _upload_poster(poster: UploadFile) -> dict:
+    if poster.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(status_code=400, detail="Invalid poster format. Use image/jpeg or image/png")
 
+    suffix = Path(poster.filename or "").suffix or ".jpg"
+    poster_key = f"movies/posters/{uuid4()}{suffix}"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await poster.read())
+        temp_path = temp_file.name
+
+    try:
+        poster_url = await upload_file(settings.MINIO_BUCKET_NAME, poster_key, temp_path, content_type=poster.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    return {"storage_path": poster_key, "url": poster_url, "is_primary": True}
 
 
 def _poster_from_url(url: str) -> dict:
@@ -214,11 +231,9 @@ async def create_movie(
     db: AsyncSession = Depends(get_db),
 ):
     movie_service = MovieService(db)
-    
-    # We no longer handle `poster` from MovieCreate, it's deprecated or just ignored,
-    # because they will upload via the /poster endpoint.
+    poster_payload = _poster_payload_from_value(movie_data.poster)
     try:
-        movie = await movie_service.create_movie(movie_data)
+        movie = await movie_service.create_movie(movie_data, poster_payload=poster_payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -266,24 +281,7 @@ async def upload_movie_poster(
     _current_admin: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if poster.content_type not in ["image/jpeg", "image/png"]:
-        raise HTTPException(status_code=400, detail="Invalid poster format. Use image/jpeg or image/png")
-        
-    suffix = Path(poster.filename).suffix or ".jpg"
-    poster_key = f"movies/{movie_id}/poster{suffix}"
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-        temp_file.write(await poster.read())
-        temp_path = temp_file.name
-        
-    try:
-        await upload_file("posters", poster_key, temp_path, content_type=poster.content_type)
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
-
-    poster_payload = {"storage_path": poster_key, "url": "", "is_primary": True}
-    
+    poster_payload = await _upload_poster(poster)
     movie_service = MovieService(db)
     movie = await movie_service.update_movie(
         movie_id,
@@ -319,7 +317,7 @@ async def upload_movie_video(
         temp_path = temp_file.name
         
     try:
-        await upload_file("movies", video_key, temp_path, content_type=video_file.content_type)
+        await upload_file(settings.MINIO_BUCKET_NAME, video_key, temp_path, content_type=video_file.content_type)
     finally:
         if os.path.exists(temp_path):
             os.unlink(temp_path)
