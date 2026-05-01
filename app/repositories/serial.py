@@ -131,7 +131,11 @@ class SerialRepository:
 
     # Seasons
     async def get_season_by_id(self, season_id: UUID) -> Optional[Season]:
-        stmt = select(Season).where(Season.id == season_id)
+        stmt = (
+            select(Season)
+            .options(selectinload(Season.episodes).selectinload(SerialEpisode.episode_file))
+            .where(Season.id == season_id)
+        )
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
@@ -162,7 +166,11 @@ class SerialRepository:
 
     # Episodes
     async def get_episode_by_id(self, episode_id: UUID) -> Optional[SerialEpisode]:
-        stmt = select(SerialEpisode).where(SerialEpisode.id == episode_id)
+        stmt = (
+            select(SerialEpisode)
+            .options(selectinload(SerialEpisode.episode_file))
+            .where(SerialEpisode.id == episode_id)
+        )
         result = await self.db.execute(stmt)
         return result.scalars().first()
 

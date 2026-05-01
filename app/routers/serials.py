@@ -129,6 +129,36 @@ async def delete_serial(
     if not await service.delete(serial_id):
         raise HTTPException(status_code=404, detail="Serial not found")
 
+@admin_router.post("/{serial_id}/poster", response_model=SerialResponse)
+async def upload_serial_poster(
+    serial_id: UUID,
+    poster: UploadFile = File(...),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if poster.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(status_code=400, detail="Invalid poster format. Use image/jpeg or image/png")
+
+    suffix = Path(poster.filename or "").suffix or ".jpg"
+    poster_key = f"serials/posters/{uuid4()}{suffix}"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await poster.read())
+        temp_path = temp_file.name
+
+    try:
+        await upload_file(settings.MINIO_BUCKET_NAME, poster_key, temp_path, content_type=poster.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    service = SerialService(db)
+    serial = await service.update(serial_id, SerialUpdate(poster_key=poster_key))
+    if not serial:
+        raise HTTPException(status_code=404, detail="Serial not found")
+
+    return serial
+
 @admin_router.post("/{serial_id}/seasons/", response_model=SeasonResponse, status_code=status.HTTP_201_CREATED)
 async def add_season(
     serial_id: UUID,
