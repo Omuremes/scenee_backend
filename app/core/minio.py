@@ -77,6 +77,7 @@ def _public_minio_client() -> Minio:
         access_key=settings.MINIO_ACCESS_KEY,
         secret_key=settings.MINIO_SECRET_KEY,
         secure=public_base_url.scheme == "https",
+        region="us-east-1", # Skip network call to discover region
     )
 
 
