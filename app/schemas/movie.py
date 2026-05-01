@@ -156,6 +156,8 @@ class MovieResponse(MovieBase):
     category: Optional[MovieCategoryResponse] = None
     categories: List[MovieCategoryResponse] = Field(default_factory=list)
     actors: List[ActorResponse] = Field(default_factory=list)
+    posters: List[PosterResponse] = Field(default_factory=list)
+    primary_poster: Optional[PosterResponse] = None
     poster_url: Optional[str] = None
     video_url: Optional[str] = None
 

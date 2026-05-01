@@ -40,9 +40,11 @@ class Serial(Base):
 
     @property
     def poster_url(self):
-        from app.core.minio import get_presigned_url_sync
+        from app.core.config import settings
+        from app.core.minio import build_public_object_url
+
         if self.poster_key:
-            return get_presigned_url_sync("posters", self.poster_key, expires=3600)
+            return build_public_object_url(settings.MINIO_BUCKET_NAME, self.poster_key)
         return None
 
 

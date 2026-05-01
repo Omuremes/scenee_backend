@@ -91,17 +91,31 @@ class Movie(Base):
         return self.duration_minutes
 
     @property
+    def primary_poster(self):
+        loaded_posters = self.__dict__.get("posters") or []
+        if not loaded_posters:
+            return None
+        return next((poster for poster in loaded_posters if poster.is_primary), loaded_posters[0])
+
+    @property
     def poster_url(self):
-        from app.core.minio import get_presigned_url_sync
+        from app.core.config import settings
+        from app.core.minio import build_public_object_url, to_public_url
+
+        primary_poster = self.primary_poster
+        if primary_poster:
+            return to_public_url(primary_poster.url) or primary_poster.url
+
         if self.poster_key:
-            return get_presigned_url_sync("posters", self.poster_key, expires=3600)
+            return build_public_object_url(settings.MINIO_BUCKET_NAME, self.poster_key)
         return None
 
     @property
     def video_url(self):
+        from app.core.config import settings
         from app.core.minio import get_presigned_url_sync
         if self.video_file_key:
-            return get_presigned_url_sync("movies", self.video_file_key, expires=3600)
+            return get_presigned_url_sync(settings.MINIO_BUCKET_NAME, self.video_file_key, expires=3600)
         return None
 
 
