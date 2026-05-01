@@ -93,7 +93,7 @@ async def test_movie_service_create_requires_existing_category(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_movie_service_maps_duration_to_minutes_and_sets_single_season():
+async def test_movie_service_maps_duration_to_minutes():
     repository = FakeMovieRepository()
     service = object.__new__(MovieService)
     service.repository = repository
@@ -109,5 +109,4 @@ async def test_movie_service_maps_duration_to_minutes_and_sets_single_season():
     )
 
     assert repository.created_payload["duration_minutes"] == 116
-    assert repository.created_payload["seasons_count"] == 1
     assert movie.name == "Existing movie" or movie.id is not None

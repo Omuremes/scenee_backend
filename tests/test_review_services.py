@@ -71,6 +71,9 @@ class FakeEventReviewRepository:
     async def update(self, review_id, data):
         return self.review
 
+    async def get_event_reviews(self, event_id, skip, limit):
+        return []
+
 
 class FakeEventExistsRepository:
     def __init__(self, exists=True, event_type="cinema"):
@@ -127,6 +130,16 @@ async def test_create_event_review_requires_cinema_event():
             uuid4(),
             EventReviewCreate(event_id=uuid4(), rating=9.0, text="Great"),
         )
+
+
+@pytest.mark.asyncio
+async def test_get_event_reviews_requires_cinema_event():
+    service = object.__new__(EventReviewService)
+    service.repository = FakeEventReviewRepository()
+    service.event_repository = FakeEventExistsRepository(exists=True, event_type="kids")
+
+    with pytest.raises(ValueError, match="only available for cinema"):
+        await service.get_event_reviews(uuid4())
 
 
 @pytest.mark.asyncio

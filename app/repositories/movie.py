@@ -5,7 +5,7 @@ from app.repositories.content import BaseContentRepository, MovieCategoryReposit
 
 class MovieRepository(BaseContentRepository):
     def __init__(self, db: AsyncSession):
-        super().__init__(db, is_series=False)
+        super().__init__(db)
 
     async def search_movies(self, query=None, category_id=None, skip: int = 0, limit: int = 20):
         return await self.search_content(query=query, category_id=category_id, skip=skip, limit=limit)

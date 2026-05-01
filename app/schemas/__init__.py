@@ -4,10 +4,8 @@ from .movie import (
     MovieCategoryBase, MovieCategoryCreate, MovieCategoryUpdate, MovieCategoryResponse, MovieCategoryPageResponse,
     ActorBase, ActorCreate, ActorUpdate, ActorResponse, ActorPageResponse,
     PosterBase, PosterResponse,
-    EpisodeBase, EpisodeCreate, EpisodeUpdate, EpisodeResponse,
     MovieBase, MovieCreate, MovieUpdate, MovieResponse, MovieListResponse, MoviePageResponse
 )
-from .series import SeriesBase, SeriesCreate, SeriesUpdate, SeriesResponse, SeriesListResponse, SeriesPageResponse
 from .serial import (
     EpisodeFileBase, EpisodeFileResponse, SerialEpisodeBase, SerialEpisodeCreate, SerialEpisodeUpdate, SerialEpisodeResponse,
     SeasonBase, SeasonCreate, SeasonUpdate, SeasonResponse,
@@ -33,9 +31,7 @@ __all__ = [
     "MovieCategoryBase", "MovieCategoryCreate", "MovieCategoryUpdate", "MovieCategoryResponse", "MovieCategoryPageResponse",
     "ActorBase", "ActorCreate", "ActorUpdate", "ActorResponse", "ActorPageResponse",
     "PosterBase", "PosterResponse",
-    "EpisodeBase", "EpisodeCreate", "EpisodeUpdate", "EpisodeResponse",
     "MovieBase", "MovieCreate", "MovieUpdate", "MovieResponse", "MovieListResponse", "MoviePageResponse",
-    "SeriesBase", "SeriesCreate", "SeriesUpdate", "SeriesResponse", "SeriesListResponse", "SeriesPageResponse",
     "ReviewBase", "ReviewCreate", "ReviewUpdate", "ReviewResponse", "ReviewUserResponse",
     "EventType", "SessionPricingType",
     "VenueBase", "VenueResponse",

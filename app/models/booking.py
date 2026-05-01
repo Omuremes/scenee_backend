@@ -3,14 +3,8 @@ from datetime import datetime
 from sqlalchemy import Column, String, Float, Integer, ForeignKey, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from app.core.enums import BookingStatus
 from app.core.database import Base
-import enum
-
-
-class BookingStatus(enum.Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    CANCELLED = "cancelled"
 
 
 class Booking(Base):

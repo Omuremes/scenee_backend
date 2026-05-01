@@ -2,14 +2,8 @@ from pydantic import Field
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
-from enum import Enum
+from app.core.enums import BookingStatus
 from app.schemas.base import BaseSchema
-
-
-class BookingStatus(str, Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    CANCELLED = "cancelled"
 
 
 class BookingBase(BaseSchema):

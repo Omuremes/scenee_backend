@@ -15,16 +15,6 @@ from app.services.movie import MovieService
 def _build_movie(movie_id=None):
     movie_id = movie_id or uuid4()
     category = SimpleNamespace(id=uuid4(), name="Drama", slug="drama")
-    episode = SimpleNamespace(
-        id=uuid4(),
-        movie_id=movie_id,
-        season_number=1,
-        episode_number=1,
-        title="Pilot",
-        description=None,
-        video_url=None,
-        duration=42,
-    )
     poster = SimpleNamespace(
         id=uuid4(),
         movie_id=movie_id,
@@ -36,9 +26,7 @@ def _build_movie(movie_id=None):
         id=movie_id,
         name="Arrival",
         description="First contact",
-        is_series=False,
         duration=116,
-        seasons_count=1,
         average_rating=8.9,
         created_at="2026-04-26T10:00:00",
         updated_at=None,
@@ -47,7 +35,6 @@ def _build_movie(movie_id=None):
         categories=[category],
         actors=[],
         posters=[poster],
-        episodes=[episode],
         primary_poster=poster,
     )
 
@@ -325,11 +312,6 @@ async def test_public_movie_routes_expose_new_collection(monkeypatch):
     async def fake_get_new_movies(self, limit):
         assert limit == 3
         return [movie]
-
-    async def fake_get_season_episodes(self, movie_id, season_number):
-        assert movie_id == movie.id
-        assert season_number == 1
-        return movie.episodes
 
     async def fake_get_cache(key: str):
         return None

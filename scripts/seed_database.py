@@ -32,6 +32,7 @@ from app.models import (
     EventReview,
     EventSeat,
     EventSession,
+    EpisodeFile,
     Favorite,
     Movie,
     MovieCategory,
@@ -65,7 +66,6 @@ async def get_movie(session: AsyncSession, name: str) -> Movie | None:
             selectinload(Movie.actors),
             selectinload(Movie.categories),
             selectinload(Movie.posters),
-            selectinload(Movie.episodes),
         )
     )
     result = await session.execute(stmt)
@@ -89,7 +89,7 @@ async def get_serial(session: AsyncSession, name: str) -> Serial | None:
         .options(
             selectinload(Serial.actors),
             selectinload(Serial.categories),
-            selectinload(Serial.seasons).selectinload(Season.episodes),
+            selectinload(Serial.seasons).selectinload(Season.episodes).selectinload(SerialEpisode.episode_file),
         )
     )
     result = await session.execute(stmt)
@@ -239,53 +239,156 @@ async def seed_movie_catalog(session: AsyncSession) -> tuple[list[Movie], list[S
             movie.posters[0].is_primary = True
         movies.append(movie)
 
-    serial = await get_serial(session, "Borderless")
-    serial_created = serial is None
-    if serial is None:
-        serial = Serial(
-            name="Borderless",
-            description="Anthology series about people whose lives cross at airports, stations, and hotels.",
-            poster_key="seed/posters/borderless.jpg",
-            average_rating=8.4,
-        )
-        session.add(serial)
-    else:
-        serial.description = "Anthology series about people whose lives cross at airports, stations, and hotels."
-        serial.poster_key = "seed/posters/borderless.jpg"
-        serial.average_rating = 8.4
+    serials_payload = [
+        {
+            "name": "Borderless",
+            "description": "Anthology series about people whose lives cross at airports, stations, and hotels.",
+            "poster_key": "seed/posters/borderless.jpg",
+            "average_rating": 8.4,
+            "categories": [categories["drama"], categories["sci-fi"]],
+            "actors": [actors["mira"], actors["leila"]],
+            "seasons": [
+                {
+                    "season_number": 1,
+                    "title": "Departures",
+                    "release_year": 2026,
+                    "episodes": [
+                        (1, "Gate A12", "A missed flight changes two plans.", 2760),
+                        (2, "Night Transfer", "A courier waits out a storm.", 2880),
+                        (3, "The Last Room", "A hotel clerk recognizes an old guest.", 2940),
+                    ],
+                }
+            ],
+        },
+        {
+            "name": "Atlas Room",
+            "description": "A mystery series about archivists mapping impossible rooms under an old cinema.",
+            "poster_key": "seed/posters/atlas-room.jpg",
+            "average_rating": 8.8,
+            "categories": [categories["drama"]],
+            "actors": [actors["dan"], actors["leila"]],
+            "seasons": [
+                {
+                    "season_number": 1,
+                    "title": "The First Door",
+                    "release_year": 2026,
+                    "episodes": [
+                        (1, "Dust Map", "An archivist finds a map that changes every night.", 2640),
+                        (2, "Room Seven", "The team opens a door that should not exist.", 2820),
+                    ],
+                }
+            ],
+        },
+    ]
 
-    serial.categories = [categories["drama"], categories["sci-fi"]]
-    serial.actors = [actors["mira"], actors["leila"]]
-    await session.flush()
+    serials: list[Serial] = []
+    for payload in serials_payload:
+        season_payloads = payload.pop("seasons")
+        relation_values = {
+            "categories": payload.pop("categories"),
+            "actors": payload.pop("actors"),
+        }
+        serial = await get_serial(session, payload["name"])
+        if serial is None:
+            serial = Serial(**payload)
+            session.add(serial)
+        else:
+            for key, value in payload.items():
+                setattr(serial, key, value)
+        serial.categories = relation_values["categories"]
+        serial.actors = relation_values["actors"]
+        await session.flush()
 
-    if serial_created or not serial.seasons:
-        season = Season(serial=serial, season_number=1, title="Departures", release_year=2026)
-        season.episodes = [
-            SerialEpisode(episode_number=1, title="Gate A12", description="A missed flight changes two plans.", duration=2760),
-            SerialEpisode(episode_number=2, title="Night Transfer", description="A courier waits out a storm.", duration=2880),
-            SerialEpisode(episode_number=3, title="The Last Room", description="A hotel clerk recognizes an old guest.", duration=2940),
-        ]
-        session.add(season)
+        for season_payload in season_payloads:
+            episode_payloads = season_payload.pop("episodes")
+            season = await get_one(
+                session,
+                Season,
+                serial_id=serial.id,
+                season_number=season_payload["season_number"],
+            )
+            if season is None:
+                season = Season(serial_id=serial.id, **season_payload)
+                session.add(season)
+            else:
+                season.title = season_payload["title"]
+                season.release_year = season_payload["release_year"]
+            await session.flush()
 
-    return movies, [serial]
+            for episode_number, title, description, duration in episode_payloads:
+                episode = await get_one(
+                    session,
+                    SerialEpisode,
+                    season_id=season.id,
+                    episode_number=episode_number,
+                )
+                if episode is None:
+                    episode = SerialEpisode(
+                        season_id=season.id,
+                        episode_number=episode_number,
+                        title=title,
+                        description=description,
+                        duration=duration,
+                    )
+                    session.add(episode)
+                else:
+                    episode.title = title
+                    episode.description = description
+                    episode.duration = duration
+                await session.flush()
+
+                object_key = f"seed/serials/{serial.name.lower().replace(' ', '-')}/s{season.season_number:02d}e{episode_number:02d}.mp4"
+                episode_file = await get_one(session, EpisodeFile, episode_id=episode.id)
+                if episode_file is None:
+                    session.add(EpisodeFile(
+                        episode_id=episode.id,
+                        minio_bucket="episodes",
+                        minio_object_key=object_key,
+                        file_size=duration * 512,
+                        mime_type="video/mp4",
+                    ))
+                else:
+                    episode_file.minio_bucket = "episodes"
+                    episode_file.minio_object_key = object_key
+                    episode_file.file_size = duration * 512
+                    episode_file.mime_type = "video/mp4"
+
+        serials.append(serial)
+
+    return movies, serials
 
 
-def build_seats(session_obj: EventSession, base_price: float) -> None:
-    if session_obj.seats:
-        return
+def build_seats(session_obj: EventSession, base_price: float, *, per_seat: bool) -> None:
     rows = ("A", "B", "C")
+    existing_by_label = {seat.label: seat for seat in session_obj.seats}
     for row in rows:
         for number in range(1, 7):
-            zone = "vip" if row == "A" else "standard"
-            price = base_price + 250 if zone == "vip" else base_price
-            session_obj.seats.append(EventSeat(label=f"{row}{number}", zone=zone, price=price, is_available=True))
+            label = f"{row}{number}"
+            if row == "A":
+                zone = "vip"
+                price = base_price + 600 if per_seat else base_price
+            elif row == "B":
+                zone = "comfort"
+                price = base_price + 300 if per_seat else base_price
+            else:
+                zone = "standard"
+                price = base_price
+
+            seat = existing_by_label.get(label)
+            if seat is None:
+                session_obj.seats.append(EventSeat(label=label, zone=zone, price=price, is_available=True))
+            else:
+                seat.zone = zone
+                seat.price = price
 
 
 async def seed_events(session: AsyncSession) -> list[Event]:
     categories = {
         "cinema": await upsert_by(session, EventCategory, {"slug": "cinema"}, {"name": "Cinema"}),
         "concerts": await upsert_by(session, EventCategory, {"slug": "concerts"}, {"name": "Concerts"}),
+        "stand-up": await upsert_by(session, EventCategory, {"slug": "stand-up"}, {"name": "Stand-Up"}),
         "kids": await upsert_by(session, EventCategory, {"slug": "kids"}, {"name": "Kids"}),
+        "events": await upsert_by(session, EventCategory, {"slug": "events"}, {"name": "Events"}),
     }
     venues = {
         "central": await upsert_by(
@@ -299,6 +402,18 @@ async def seed_events(session: AsyncSession) -> list[Event]:
             Venue,
             {"name": "Oak Arena"},
             {"address": "Aaly Tokombaev 45", "city": "Bishkek", "latitude": 42.833, "longitude": 74.61, "capacity": 900},
+        ),
+        "club": await upsert_by(
+            session,
+            Venue,
+            {"name": "Basement Comedy Club"},
+            {"address": "Toktogul St 88", "city": "Bishkek", "latitude": 42.872, "longitude": 74.591, "capacity": 120},
+        ),
+        "expo": await upsert_by(
+            session,
+            Venue,
+            {"name": "Bishkek Expo Hall"},
+            {"address": "Manas Ave 40", "city": "Bishkek", "latitude": 42.86, "longitude": 74.585, "capacity": 600},
         ),
     }
 
@@ -315,8 +430,8 @@ async def seed_events(session: AsyncSession) -> list[Event]:
             "venue": venues["central"],
             "average_rating": 9.0,
             "sessions": [
-                (now + timedelta(days=1, hours=18), 450.0, "Hall 1"),
-                (now + timedelta(days=2, hours=20), 500.0, "Hall 2"),
+                {"starts_at": now + timedelta(days=1, hours=18), "price": 450.0, "hall_name": "Hall 1", "pricing_type": "fixed", "has_seats": True},
+                {"starts_at": now + timedelta(days=2, hours=20), "price": 500.0, "hall_name": "Hall 2", "pricing_type": "fixed", "has_seats": True},
             ],
         },
         {
@@ -329,7 +444,23 @@ async def seed_events(session: AsyncSession) -> list[Event]:
             "category": categories["concerts"],
             "venue": venues["arena"],
             "average_rating": 8.2,
-            "sessions": [(now + timedelta(days=4, hours=19), 1200.0, "Main Stage")],
+            "sessions": [
+                {"starts_at": now + timedelta(days=4, hours=19), "price": 1200.0, "hall_name": "Main Stage", "pricing_type": "per_seat", "has_seats": True}
+            ],
+        },
+        {
+            "title": "Friday Stand-Up Showcase",
+            "description": "A late comedy showcase with priced seating zones.",
+            "type": "stand-up",
+            "poster_url": f"{POSTER_BASE_URL}/600x900/BE123C/FFFFFF?text=Stand-Up",
+            "trailer_url": "https://example.com/trailers/friday-stand-up",
+            "city": "Bishkek",
+            "category": categories["stand-up"],
+            "venue": venues["club"],
+            "average_rating": 8.5,
+            "sessions": [
+                {"starts_at": now + timedelta(days=5, hours=20), "price": 700.0, "hall_name": "Comedy Room", "pricing_type": "per_seat", "has_seats": True}
+            ],
         },
         {
             "title": "Little Inventors Workshop",
@@ -341,7 +472,23 @@ async def seed_events(session: AsyncSession) -> list[Event]:
             "category": categories["kids"],
             "venue": venues["central"],
             "average_rating": 7.9,
-            "sessions": [(now + timedelta(days=3, hours=11), 350.0, "Studio")],
+            "sessions": [
+                {"starts_at": now + timedelta(days=3, hours=11), "price": 350.0, "hall_name": "Studio", "pricing_type": "fixed", "has_seats": False, "capacity": 40}
+            ],
+        },
+        {
+            "title": "Design Weekend Expo",
+            "description": "A city design fair with general admission tickets and no seat map.",
+            "type": "events",
+            "poster_url": f"{POSTER_BASE_URL}/600x900/0F766E/FFFFFF?text=Design+Expo",
+            "trailer_url": None,
+            "city": "Bishkek",
+            "category": categories["events"],
+            "venue": venues["expo"],
+            "average_rating": 8.0,
+            "sessions": [
+                {"starts_at": now + timedelta(days=6, hours=10), "price": 600.0, "hall_name": "Expo Floor", "pricing_type": "fixed", "has_seats": False, "capacity": 250}
+            ],
         },
     ]
 
@@ -362,37 +509,44 @@ async def seed_events(session: AsyncSession) -> list[Event]:
         event.category = event_category
         event.venue = venue
         event.image_url = event.poster_url
-        event.start_datetime = session_payloads[0][0]
-        event.end_datetime = session_payloads[0][0] + timedelta(hours=2)
-        event.price = session_payloads[0][1]
-        event.max_capacity = 18 * len(session_payloads)
-        event.available_seats = 18 * len(session_payloads)
+        event.start_datetime = session_payloads[0]["starts_at"]
+        event.end_datetime = session_payloads[0]["starts_at"] + timedelta(hours=2)
+        event.price = session_payloads[0]["price"]
+        event.max_capacity = sum(18 if item["has_seats"] else item.get("capacity", 0) for item in session_payloads)
+        event.available_seats = event.max_capacity
         event.is_active = True
         await session.flush()
 
         existing_sessions = [] if event_created else list(event.sessions)
-        for index, (starts_at, price, hall_name) in enumerate(session_payloads):
+        for index, session_payload in enumerate(session_payloads):
+            starts_at = session_payload["starts_at"]
+            price = session_payload["price"]
+            hall_name = session_payload["hall_name"]
+            pricing_type = session_payload["pricing_type"]
+            has_seats = session_payload["has_seats"]
             if index < len(existing_sessions):
                 event_session = existing_sessions[index]
                 event_session.starts_at = starts_at
                 event_session.ends_at = starts_at + timedelta(hours=2)
                 event_session.base_price = price
-                event_session.pricing_type = "per_seat"
+                event_session.pricing_type = pricing_type
                 event_session.cinema_name = venue.name
                 event_session.hall_name = hall_name
-                build_seats(event_session, price)
             else:
                 event_session = EventSession(
                     event=event,
                     starts_at=starts_at,
                     ends_at=starts_at + timedelta(hours=2),
                     base_price=price,
-                    pricing_type="per_seat",
+                    pricing_type=pricing_type,
                     cinema_name=venue.name,
                     hall_name=hall_name,
                 )
-                build_seats(event_session, price)
                 session.add(event_session)
+            if has_seats:
+                build_seats(event_session, price, per_seat=pricing_type == "per_seat")
+            else:
+                event_session.seats.clear()
         events.append(event)
 
     return events
@@ -459,6 +613,7 @@ async def seed_social_data(session: AsyncSession, users: dict[str, User], movies
             booking.total_price = seat.price
             booking.status = BookingStatus.CONFIRMED
         seat.is_available = False
+        event.available_seats = max((event.max_capacity or 0) - 1, 0)
 
 
 def print_summary(users: dict[str, User], movies: Iterable[Movie], serials: Iterable[Serial], events: Iterable[Event]) -> None:

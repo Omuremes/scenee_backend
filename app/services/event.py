@@ -26,7 +26,8 @@ from app.schemas.event import normalize_event_type
 from app.services.base import BaseService
 
 
-SEATING_EVENT_TYPES = {"concerts", "stand-up", "sports"}
+SEATED_EVENT_TYPES = {"cinema", "concerts", "stand-up", "sports"}
+PER_SEAT_EVENT_TYPES = {"concerts", "stand-up", "sports"}
 NON_SEATING_EVENT_TYPES = {"kids", "events"}
 
 
@@ -213,8 +214,8 @@ class EventService(BaseService[EventRepository]):
         session = await self.session_repository.get_with_details(session_id)
         if not session:
             raise ValueError("Session not found")
-        if session.event.type not in SEATING_EVENT_TYPES:
-            raise ValueError("Seats are only supported for concerts, stand-up, and sports events")
+        if session.event.type not in SEATED_EVENT_TYPES:
+            raise ValueError("Seats are only supported for cinema, concerts, stand-up, and sports events")
         payload = seat_data.model_dump()
         payload["session_id"] = session_id
         return await self.seat_repository.create(payload)
@@ -269,10 +270,15 @@ class EventService(BaseService[EventRepository]):
     @staticmethod
     def _validate_sessions(event_type: str, sessions: List[EventSessionCreate]) -> None:
         for session in sessions:
+            pricing_type = session.pricing_type.value if hasattr(session.pricing_type, "value") else session.pricing_type
             if event_type in NON_SEATING_EVENT_TYPES and session.seats:
                 raise ValueError("Kids and events sessions cannot contain seats")
-            if event_type == "cinema" and session.pricing_type == "per_seat" and not session.seats:
-                raise ValueError("Per-seat cinema sessions must define seats")
+            if event_type == "cinema" and pricing_type == "per_seat":
+                raise ValueError("Cinema sessions use ticket pricing, not per-seat pricing")
+            if event_type in PER_SEAT_EVENT_TYPES and pricing_type != "per_seat":
+                raise ValueError("Concerts, stand-up, and sports sessions must use per-seat pricing")
+            if event_type in PER_SEAT_EVENT_TYPES and not session.seats:
+                raise ValueError("Per-seat sessions must define seats")
 
     @staticmethod
     def _apply_legacy_session_fields(payload: dict, sessions: List[EventSessionCreate]) -> None:
@@ -285,7 +291,8 @@ class EventService(BaseService[EventRepository]):
         payload["start_datetime"] = first_session.starts_at
         payload["end_datetime"] = first_session.ends_at
         payload["price"] = first_session.base_price
-        payload["max_capacity"] = sum(len(session.seats) for session in sessions) or payload.get("max_capacity") or 0
+        seats_capacity = sum(len(session.seats) for session in sessions)
+        payload["max_capacity"] = seats_capacity or payload.get("max_capacity") or 0
         payload["available_seats"] = sum(
             1 for session in sessions for seat in session.seats if seat.is_available
         ) or payload["max_capacity"]
@@ -297,6 +304,10 @@ class EventService(BaseService[EventRepository]):
         first_session = sessions[0]
         max_capacity = sum(len(session.seats) for session in sessions)
         available = sum(1 for session in sessions for seat in session.seats if seat.is_available)
+        if not max_capacity:
+            event = await self.repository.get_by_id(event_id)
+            max_capacity = event.max_capacity or 0 if event else 0
+            available = event.available_seats or 0 if event else 0
         await self.repository.update(
             event_id,
             {

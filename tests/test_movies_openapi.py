@@ -6,7 +6,7 @@ def test_admin_movie_create_openapi_uses_pydantic_json_schema():
     create_operation = schema["paths"]["/v1/admin/movies/"]["post"]
     update_operation = schema["paths"]["/v1/admin/movies/{movie_id}"]["patch"]
     poster_operation = schema["paths"]["/v1/admin/movies/{movie_id}/poster"]["post"]
-    series_create_operation = schema["paths"]["/v1/admin/series/"]["post"]
+    serial_create_operation = schema["paths"]["/v1/admin/serials/"]["post"]
 
     assert "requestBody" in create_operation
     create_content = create_operation["requestBody"]["content"]
@@ -19,9 +19,8 @@ def test_admin_movie_create_openapi_uses_pydantic_json_schema():
     assert create_content["application/json"]["schema"]["$ref"] == "#/components/schemas/MovieCreate"
     assert update_content["application/json"]["schema"]["$ref"] == "#/components/schemas/MovieUpdate"
 
-    series_content = series_create_operation["requestBody"]["content"]
-    series_json_schema = series_content["application/json"]["schema"]
-    series_multipart_schema = series_content["multipart/form-data"]["schema"]
+    serial_content = serial_create_operation["requestBody"]["content"]
+    serial_json_schema = serial_content["application/json"]["schema"]
 
-    assert "episodes" in series_json_schema["properties"]
-    assert "seasons_count" in series_multipart_schema["properties"]
+    assert list(serial_content) == ["application/json"]
+    assert serial_json_schema["$ref"] == "#/components/schemas/SerialCreate"

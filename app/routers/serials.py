@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_admin_user
 from app.core.config import settings
-from app.core.minio import upload_file, get_presigned_url
+from app.core.minio import upload_file
 from app.models.user import User
 from app.schemas.serial import (
     SerialCreate, SerialUpdate, SerialResponse, 
@@ -211,6 +211,8 @@ async def upload_episode_file(
         raise HTTPException(status_code=404, detail="Episode not found")
         
     season = await service.repo.get_season_by_id(episode.season_id)
+    if not season:
+        raise HTTPException(status_code=404, detail="Season not found")
 
     if video_file.content_type not in ["video/mp4", "video/x-matroska"]:
         raise HTTPException(status_code=400, detail="Invalid video format. Use video/mp4 or video/x-matroska")
@@ -223,8 +225,8 @@ async def upload_episode_file(
             temp_file.write(await video_file.read())
             temp_path = temp_file.name
 
-        bucket = "episodes"
-        object_key = f"{season.serial_id}/{season.season_number}/{episode_id}{suffix}"
+        bucket = settings.MINIO_BUCKET_NAME
+        object_key = f"episodes/{season.serial_id}/{season.season_number}/{episode_id}{suffix}"
         
         await upload_file(
             bucket,
