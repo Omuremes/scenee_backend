@@ -67,6 +67,9 @@ class SerialService:
             for episode_data in season_data.episodes:
                 await self.repo.add_episode(season.id, episode_data.dict())
                 
+        await self.db.commit()
+        await self.db.refresh(serial)
+        
         # Reload to get all relations
         return await self.repo.get_by_id(serial.id)
 
@@ -80,6 +83,8 @@ class SerialService:
         
         await self.repo.update(serial, data.dict(exclude_unset=True, exclude={"actors", "categories"}), actors, categories)
         
+        await self.db.commit()
+        await self.db.refresh(serial)
         return await self.repo.get_by_id(serial.id)
 
     async def delete(self, serial_id: UUID) -> bool:
@@ -87,6 +92,7 @@ class SerialService:
         if not serial:
             return False
         await self.repo.delete(serial)
+        await self.db.commit()
         return True
 
     # Seasons
@@ -94,38 +100,54 @@ class SerialService:
         season = await self.repo.add_season(serial_id, data.dict(exclude={"episodes"}))
         for episode_data in data.episodes:
             await self.repo.add_episode(season.id, episode_data.dict())
+        await self.db.commit()
+        await self.db.refresh(season)
         return await self.repo.get_season_by_id(season.id)
 
     async def update_season(self, season_id: UUID, data: SeasonUpdate) -> Optional[Season]:
         season = await self.repo.get_season_by_id(season_id)
         if not season:
             return None
-        return await self.repo.update_season(season, data.dict(exclude_unset=True))
+        updated = await self.repo.update_season(season, data.dict(exclude_unset=True))
+        await self.db.commit()
+        await self.db.refresh(updated)
+        return updated
 
     async def delete_season(self, season_id: UUID) -> bool:
         season = await self.repo.get_season_by_id(season_id)
         if not season:
             return False
         await self.repo.delete_season(season)
+        await self.db.commit()
         return True
 
     # Episodes
     async def add_episode(self, season_id: UUID, data: SerialEpisodeCreate) -> SerialEpisode:
-        return await self.repo.add_episode(season_id, data.dict())
+        episode = await self.repo.add_episode(season_id, data.dict())
+        await self.db.commit()
+        await self.db.refresh(episode)
+        return episode
 
     async def update_episode(self, episode_id: UUID, data: SerialEpisodeUpdate) -> Optional[SerialEpisode]:
         episode = await self.repo.get_episode_by_id(episode_id)
         if not episode:
             return None
-        return await self.repo.update_episode(episode, data.dict(exclude_unset=True))
+        updated = await self.repo.update_episode(episode, data.dict(exclude_unset=True))
+        await self.db.commit()
+        await self.db.refresh(updated)
+        return updated
 
     async def delete_episode(self, episode_id: UUID) -> bool:
         episode = await self.repo.get_episode_by_id(episode_id)
         if not episode:
             return False
         await self.repo.delete_episode(episode)
+        await self.db.commit()
         return True
 
     # Episode File
     async def save_episode_file(self, episode_id: UUID, bucket: str, key: str, size: int, mime: str):
-        return await self.repo.save_episode_file(episode_id, bucket, key, size, mime)
+        file = await self.repo.save_episode_file(episode_id, bucket, key, size, mime)
+        await self.db.commit()
+        await self.db.refresh(file)
+        return file

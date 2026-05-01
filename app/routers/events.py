@@ -32,7 +32,7 @@ from app.schemas.event import normalize_event_type
 from app.services import EventCategoryService, EventReviewService, EventService
 
 public_router = APIRouter(prefix="/v1/events", tags=["events"])
-admin_router = APIRouter(prefix="/v1admin/events", tags=["admin-events"])
+admin_router = APIRouter(prefix="/v1/admin/events", tags=["admin-events"])
 
 
 def _resolve_offset(offset: int, skip: Optional[int]) -> int:

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -21,7 +21,7 @@ from app.schemas.serial import (
 from app.services.serial import SerialService
 
 public_router = APIRouter(prefix="/v1/serials", tags=["serials"])
-admin_router = APIRouter(prefix="/v1/admin", tags=["admin-serials"])
+admin_router = APIRouter(prefix="/v1/admin/serials", tags=["admin-serials"])
 
 @public_router.get("/", response_model=SerialPageResponse)
 async def get_serials(
@@ -83,8 +83,9 @@ async def get_serial_season_episodes(
     return [SerialEpisodeResponse.model_validate(ep) for ep in episodes]
 
 
+# Admin Routes
 
-@admin_router.post("/serials/", response_model=SerialResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/", response_model=SerialResponse, status_code=status.HTTP_201_CREATED)
 async def create_serial(
     data: SerialCreate,
     _current_admin: User = Depends(get_current_admin_user),
@@ -93,7 +94,7 @@ async def create_serial(
     service = SerialService(db)
     return await service.create(data)
 
-@admin_router.get("/serials/{serial_id}", response_model=SerialResponse)
+@admin_router.get("/{serial_id}", response_model=SerialResponse)
 async def get_serial(
     serial_id: UUID,
     _current_admin: User = Depends(get_current_admin_user),
@@ -105,7 +106,7 @@ async def get_serial(
         raise HTTPException(status_code=404, detail="Serial not found")
     return serial
 
-@admin_router.patch("/serials/{serial_id}", response_model=SerialResponse)
+@admin_router.patch("/{serial_id}", response_model=SerialResponse)
 async def update_serial(
     serial_id: UUID,
     data: SerialUpdate,
@@ -118,7 +119,7 @@ async def update_serial(
         raise HTTPException(status_code=404, detail="Serial not found")
     return serial
 
-@admin_router.delete("/serials/{serial_id}", status_code=status.HTTP_204_NO_CONTENT)
+@admin_router.delete("/{serial_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_serial(
     serial_id: UUID,
     _current_admin: User = Depends(get_current_admin_user),
@@ -128,7 +129,7 @@ async def delete_serial(
     if not await service.delete(serial_id):
         raise HTTPException(status_code=404, detail="Serial not found")
 
-@admin_router.post("/serials/{serial_id}/seasons/", response_model=SeasonResponse, status_code=status.HTTP_201_CREATED)
+@admin_router.post("/{serial_id}/seasons/", response_model=SeasonResponse, status_code=status.HTTP_201_CREATED)
 async def add_season(
     serial_id: UUID,
     data: SeasonCreate,
@@ -138,7 +139,7 @@ async def add_season(
     service = SerialService(db)
     return await service.add_season(serial_id, data)
 
-@admin_router.patch("/serials/{serial_id}/seasons/{season_id}", response_model=SeasonResponse)
+@admin_router.patch("/{serial_id}/seasons/{season_id}", response_model=SeasonResponse)
 async def update_season(
     serial_id: UUID,
     season_id: UUID,
@@ -152,7 +153,7 @@ async def update_season(
         raise HTTPException(status_code=404, detail="Season not found")
     return season
 
-@admin_router.delete("/serials/{serial_id}/seasons/{season_id}", status_code=status.HTTP_204_NO_CONTENT)
+@admin_router.delete("/{serial_id}/seasons/{season_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_season(
     serial_id: UUID,
     season_id: UUID,

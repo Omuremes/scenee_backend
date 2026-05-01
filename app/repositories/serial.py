@@ -17,11 +17,15 @@ class SerialRepository:
         self.db = db
 
     async def get_by_id(self, serial_id: UUID) -> Optional[Serial]:
-        stmt = select(Serial).options(
-            selectinload(Serial.actors),
-            selectinload(Serial.categories),
-            selectinload(Serial.seasons).selectinload(Season.episodes).selectinload(SerialEpisode.episode_file)
-        ).where(Serial.id == serial_id)
+        stmt = (
+            select(Serial)
+            .options(
+                selectinload(Serial.actors),
+                selectinload(Serial.categories),
+                selectinload(Serial.seasons).selectinload(Season.episodes).selectinload(SerialEpisode.episode_file)
+            )
+            .where(Serial.id == serial_id)
+        )
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
@@ -210,5 +214,6 @@ class SerialRepository:
                 mime_type=mime
             )
             self.db.add(file)
+        
         await self.db.flush()
         return file
