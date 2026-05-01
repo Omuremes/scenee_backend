@@ -122,5 +122,8 @@ async def get_event_reviews(
     db: AsyncSession = Depends(get_db),
 ):
     event_review_service = EventReviewService(db)
-    reviews = await event_review_service.get_event_reviews(event_id, skip, limit)
+    try:
+        reviews = await event_review_service.get_event_reviews(event_id, skip, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return [EventReviewResponse.model_validate(review) for review in reviews]

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -163,6 +163,26 @@ class EventSeatRepository(BaseRepository[EventSeat]):
             stmt = stmt.where(EventSeat.is_available.is_(True))
         result = await self.db.execute(stmt.order_by(EventSeat.label.asc()))
         return result.scalars().all()
+
+    async def reserve_seat(self, seat_id: UUID) -> Optional[EventSeat]:
+        result = await self.db.execute(
+            update(EventSeat)
+            .where(EventSeat.id == seat_id, EventSeat.is_available.is_(True))
+            .values(is_available=False)
+            .returning(EventSeat)
+        )
+        await self.db.commit()
+        return result.scalar_one_or_none()
+
+    async def release_seat(self, seat_id: UUID) -> Optional[EventSeat]:
+        result = await self.db.execute(
+            update(EventSeat)
+            .where(EventSeat.id == seat_id)
+            .values(is_available=True)
+            .returning(EventSeat)
+        )
+        await self.db.commit()
+        return result.scalar_one_or_none()
 
 
 class VenueRepository(BaseRepository[Venue]):

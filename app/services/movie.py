@@ -12,7 +12,7 @@ from app.services.content import BaseContentService
 
 class MovieService(BaseContentService):
     def __init__(self, db: AsyncSession):
-        super().__init__(MovieRepository(db), is_series=False)
+        super().__init__(MovieRepository(db))
 
     async def get_movie_with_details(self, movie_id: UUID):
         return await self.get_content_with_details(movie_id)
@@ -51,7 +51,6 @@ class MovieService(BaseContentService):
             payload,
             actors=actors,
             categories=categories,
-            episodes=[],
             poster_payload=poster_payload,
         )
         return await self.repository.get_with_details(movie.id)
@@ -87,7 +86,6 @@ class MovieService(BaseContentService):
             payload,
             actors=actors,
             categories=categories,
-            episodes=None,
             poster_payload=poster_payload,
             poster_provided=poster_provided,
         )

@@ -87,6 +87,9 @@ class EventReviewService(BaseService[EventReviewRepository]):
         review = await self.repository.get_by_id(review_id)
         if not review or review.user_id != user_id:
             return None
+        event = await self.event_repository.get_by_id(review.event_id)
+        if not event or event.type != "cinema":
+            raise ValueError("Reviews are only available for cinema events")
 
         update_data = _normalize_review_payload(review_data.model_dump(exclude_unset=True))
         if not update_data:
@@ -107,4 +110,9 @@ class EventReviewService(BaseService[EventReviewRepository]):
         return deleted
 
     async def get_event_reviews(self, event_id: UUID, skip: int = 0, limit: int = 20) -> List[dict]:
+        event = await self.event_repository.get_by_id(event_id)
+        if not event:
+            raise ValueError("Event not found")
+        if event.type != "cinema":
+            raise ValueError("Reviews are only available for cinema events")
         return await self.repository.get_event_reviews(event_id, skip, limit)

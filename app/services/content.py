@@ -2,14 +2,12 @@ from typing import Iterable, List, Optional
 from uuid import UUID
 
 from app.repositories import ActorRepository, MovieCategoryRepository
-from app.schemas.movie import EpisodeCreate
 from app.services.base import BaseService
 
 
 class BaseContentService(BaseService):
-    def __init__(self, repository, *, is_series: bool):
+    def __init__(self, repository):
         super().__init__(repository)
-        self.is_series = is_series
 
     async def get_content_with_details(self, content_id: UUID):
         return await self.repository.get_with_details(content_id)
@@ -45,19 +43,7 @@ class BaseContentService(BaseService):
             deduped.append(value)
         return deduped
 
-    @staticmethod
-    def _resolve_seasons_count(
-        seasons_count: Optional[int],
-        episodes: Iterable[dict],
-        default_value: int = 1,
-    ) -> int:
-        episode_seasons = [episode["season_number"] for episode in episodes]
-        inferred_count = max(episode_seasons, default=default_value)
-        if seasons_count is None:
-            return inferred_count
-        return max(seasons_count, inferred_count)
-
-    def _build_content_payload(self, content_data, partial: bool = False, default_seasons_count: int = 1) -> dict:
+    def _build_content_payload(self, content_data, partial: bool = False) -> dict:
         if hasattr(content_data, "model_dump"):
             raw_data = content_data.model_dump(exclude_unset=partial)
         else:
@@ -65,37 +51,14 @@ class BaseContentService(BaseService):
 
         payload = {}
         for key, value in raw_data.items():
-            if key in {"poster", "actors", "categories", "episodes"}:
+            if key in {"poster", "actors", "categories"}:
                 continue
             if key == "duration":
                 payload["duration_minutes"] = value
             else:
                 payload[key] = value
 
-        if self.is_series:
-            episodes = raw_data.get("episodes") or []
-            episode_payloads = self._build_episode_payloads([EpisodeCreate.model_validate(item) for item in episodes]) if episodes else []
-            should_recalculate = not partial or "seasons_count" in raw_data or "episodes" in raw_data
-            if should_recalculate:
-                payload["seasons_count"] = self._resolve_seasons_count(
-                    payload.get("seasons_count"),
-                    episode_payloads,
-                    default_value=default_seasons_count,
-                )
-        else:
-            payload["seasons_count"] = 1
-
         return payload
-
-    @staticmethod
-    def _build_episode_payloads(episodes: Iterable[EpisodeCreate]) -> List[dict]:
-        payloads = []
-        for episode in episodes:
-            payload = episode.model_dump()
-            duration = payload.pop("duration", None)
-            payload["duration_minutes"] = duration
-            payloads.append(payload)
-        return payloads
 
     async def _validate_category_ids(self, category_ids: List[UUID]):
         category_repository = MovieCategoryRepository(self.repository.db)

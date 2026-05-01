@@ -7,14 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.minio import normalize_media_fields
-from app.models import Actor, Episode, Movie, MovieCategory, Poster, Review
+from app.models import Actor, Movie, MovieCategory, Poster, Review
 from app.repositories.base import BaseRepository
 
 
 class BaseContentRepository(BaseRepository[Movie]):
-    def __init__(self, db: AsyncSession, *, is_series: bool):
+    def __init__(self, db: AsyncSession):
         super().__init__(Movie, db)
-        self.is_series = is_series
 
     @staticmethod
     def _detail_options():
@@ -23,22 +22,18 @@ class BaseContentRepository(BaseRepository[Movie]):
             selectinload(Movie.categories),
             selectinload(Movie.actors),
             selectinload(Movie.posters),
-            selectinload(Movie.episodes),
             selectinload(Movie.reviews),
         )
 
-    def _apply_type_filter(self, stmt):
-        return stmt.where(Movie.is_series == self.is_series)
-
     async def get_content_by_id(self, movie_id: UUID) -> Optional[Movie]:
         result = await self.db.execute(
-            self._apply_type_filter(select(Movie)).where(Movie.id == movie_id)
+            select(Movie).where(Movie.id == movie_id)
         )
         return result.scalar_one_or_none()
 
     async def get_with_details(self, movie_id: UUID) -> Optional[Movie]:
         result = await self.db.execute(
-            self._apply_type_filter(select(Movie))
+            select(Movie)
             .options(*self._detail_options())
             .where(Movie.id == movie_id)
         )
@@ -50,8 +45,6 @@ class BaseContentRepository(BaseRepository[Movie]):
         query: Optional[str] = None,
         category_id: Optional[UUID] = None,
     ):
-        stmt = self._apply_type_filter(stmt)
-
         if category_id:
             stmt = stmt.where(
                 or_(
@@ -123,7 +116,7 @@ class BaseContentRepository(BaseRepository[Movie]):
     async def get_popular_content(self, limit: int = 10) -> List[Movie]:
         review_counts = await self._review_count_subquery()
         result = await self.db.execute(
-            self._apply_type_filter(select(Movie))
+            select(Movie)
             .outerjoin(review_counts, review_counts.c.movie_id == Movie.id)
             .options(selectinload(Movie.category), selectinload(Movie.categories), selectinload(Movie.posters))
             .order_by(
@@ -145,7 +138,7 @@ class BaseContentRepository(BaseRepository[Movie]):
             else_=1,
         )
         result = await self.db.execute(
-            self._apply_type_filter(select(Movie))
+            select(Movie)
             .outerjoin(review_counts, review_counts.c.movie_id == Movie.id)
             .options(selectinload(Movie.category), selectinload(Movie.categories), selectinload(Movie.posters))
             .order_by(
@@ -159,38 +152,20 @@ class BaseContentRepository(BaseRepository[Movie]):
         )
         return result.scalars().all()
 
-    async def get_season_episodes(self, movie_id: UUID, season_number: int) -> List[Episode]:
-        result = await self.db.execute(
-            select(Episode)
-            .join(Movie, Movie.id == Episode.movie_id)
-            .where(
-                Episode.movie_id == movie_id,
-                Episode.season_number == season_number,
-                Movie.is_series == self.is_series,
-            )
-            .order_by(Episode.episode_number.asc(), Episode.id.asc())
-        )
-        return result.scalars().all()
-
     async def create_content(
         self,
         movie_data: dict,
         *,
         actors: Iterable[Actor],
         categories: Iterable[MovieCategory],
-        episodes: Iterable[dict],
         poster_payload: Optional[dict] = None,
     ) -> Movie:
         content_data = dict(movie_data)
-        content_data["is_series"] = self.is_series
-        if not self.is_series:
-            content_data["seasons_count"] = 1
 
         movie = Movie(**content_data)
         movie.actors = list(actors)
         movie.categories = list(categories)
         movie.category_id = movie.categories[0].id if movie.categories else None
-        movie.episodes = [Episode(**episode_data) for episode_data in episodes]
         if poster_payload:
             movie.posters = [Poster(**normalize_media_fields(poster_payload, ("url",)))]
 
@@ -206,7 +181,6 @@ class BaseContentRepository(BaseRepository[Movie]):
         *,
         actors: Optional[Iterable[Actor]] = None,
         categories: Optional[Iterable[MovieCategory]] = None,
-        episodes: Optional[Iterable[dict]] = None,
         poster_payload: Optional[dict] = None,
         poster_provided: bool = False,
     ) -> Optional[Movie]:
@@ -217,19 +191,12 @@ class BaseContentRepository(BaseRepository[Movie]):
         for key, value in movie_data.items():
             setattr(movie, key, value)
 
-        movie.is_series = self.is_series
-        if not self.is_series:
-            movie.seasons_count = 1
-
         if actors is not None:
             movie.actors = list(actors)
 
         if categories is not None:
             movie.categories = list(categories)
             movie.category_id = movie.categories[0].id if movie.categories else None
-
-        if episodes is not None:
-            movie.episodes = [Episode(**episode_data) for episode_data in episodes]
 
         if poster_provided:
             movie.posters = [Poster(**normalize_media_fields(poster_payload, ("url",)))] if poster_payload else []

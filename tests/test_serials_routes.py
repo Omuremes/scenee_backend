@@ -4,9 +4,11 @@ from types import SimpleNamespace
 import pytest
 from httpx import AsyncClient
 
+import app.routers.serials as serials_router_module
 from app.core.database import get_db
 from app.core.security import get_current_admin_user
 from app.main import app
+from app.models.serial import EpisodeFile
 from app.services.serial import SerialService
 
 def _build_serial(serial_id=None):
@@ -141,5 +143,84 @@ async def test_admin_serials_routes_support_create(monkeypatch):
 
         assert create_response.status_code == 201
         assert create_response.json()["name"] == "Dark Matter"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_episode_file_video_url_returns_none_when_storage_signing_fails(monkeypatch):
+    episode_file = EpisodeFile(
+        id=uuid4(),
+        episode_id=uuid4(),
+        minio_bucket="episodes",
+        minio_object_key="missing.mp4",
+    )
+
+    def fake_presigned_url(bucket_name, object_name, expires=3600):
+        raise ValueError("Failed to generate presigned URL: NoSuchBucket")
+
+    monkeypatch.setattr("app.core.minio.get_presigned_url_sync", fake_presigned_url)
+
+    assert episode_file.video_url is None
+
+
+@pytest.mark.asyncio
+async def test_admin_episode_upload_uses_configured_media_bucket(monkeypatch):
+    episode_id = uuid4()
+    season = SimpleNamespace(id=uuid4(), serial_id=uuid4(), season_number=1)
+    captured = {}
+
+    async def fake_get_db():
+        yield object()
+
+    async def fake_admin_user():
+        return SimpleNamespace(id=uuid4(), role="admin")
+
+    async def fake_upload_file(bucket_name, object_name, file_path, content_type="application/octet-stream"):
+        captured["bucket_name"] = bucket_name
+        captured["object_name"] = object_name
+        captured["content_type"] = content_type
+        return "https://minio.example.com/video.mp4"
+
+    class FakeRepo:
+        async def get_episode_by_id(self, requested_episode_id):
+            assert requested_episode_id == episode_id
+            return SimpleNamespace(id=episode_id, season_id=season.id)
+
+        async def get_season_by_id(self, requested_season_id):
+            assert requested_season_id == season.id
+            return season
+
+    class FakeSerialService:
+        def __init__(self, db):
+            self.repo = FakeRepo()
+
+        async def save_episode_file(self, requested_episode_id, bucket, key, size, mime):
+            assert requested_episode_id == episode_id
+            captured["saved_bucket"] = bucket
+            captured["saved_key"] = key
+            captured["saved_size"] = size
+            captured["saved_mime"] = mime
+            return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(serials_router_module, "upload_file", fake_upload_file)
+    monkeypatch.setattr(serials_router_module, "SerialService", FakeSerialService)
+    app.dependency_overrides[get_db] = fake_get_db
+    app.dependency_overrides[get_current_admin_user] = fake_admin_user
+
+    try:
+        async with AsyncClient(app=app, base_url="http://testserver") as client:
+            response = await client.post(
+                f"/v1/admin/episodes/{episode_id}/upload",
+                files={"video_file": ("episode.mp4", b"fake-video", "video/mp4")},
+            )
+
+        assert response.status_code == 200
+        assert captured["bucket_name"] == serials_router_module.settings.MINIO_BUCKET_NAME
+        assert captured["saved_bucket"] == serials_router_module.settings.MINIO_BUCKET_NAME
+        assert captured["object_name"] == captured["saved_key"]
+        assert captured["object_name"] == f"episodes/{season.serial_id}/1/{episode_id}.mp4"
+        assert captured["content_type"] == "video/mp4"
+        assert captured["saved_mime"] == "video/mp4"
+        assert captured["saved_size"] == len(b"fake-video")
     finally:
         app.dependency_overrides.clear()

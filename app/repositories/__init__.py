@@ -3,7 +3,6 @@ from .actor import ActorRepository
 from .user import UserRepository
 from .content import ContentRepository, MovieCategoryRepository
 from .movie import MovieRepository
-from .series import SeriesRepository
 from .event import EventCategoryRepository, EventRepository, EventSeatRepository, EventSessionRepository, VenueRepository
 from .booking import BookingRepository
 from .favorite import FavoriteRepository
@@ -15,7 +14,6 @@ __all__ = [
     "UserRepository",
     "ContentRepository",
     "MovieRepository", "MovieCategoryRepository",
-    "SeriesRepository",
     "EventCategoryRepository", "EventRepository", "EventSeatRepository", "EventSessionRepository", "VenueRepository",
     "BookingRepository",
     "FavoriteRepository",

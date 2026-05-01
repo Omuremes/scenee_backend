@@ -80,33 +80,6 @@ class PosterResponse(PosterBase):
     movie_id: UUID
 
 
-class EpisodeBase(BaseSchema):
-    season_number: int = Field(default=1, ge=1)
-    episode_number: int = Field(default=1, ge=1)
-    title: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
-    video_url: Optional[str] = Field(None, max_length=1000)
-    duration: Optional[int] = Field(None, ge=0)
-
-
-class EpisodeCreate(EpisodeBase):
-    pass
-
-
-class EpisodeUpdate(BaseSchema):
-    season_number: Optional[int] = Field(None, ge=1)
-    episode_number: Optional[int] = Field(None, ge=1)
-    title: Optional[str] = Field(None, max_length=255)
-    description: Optional[str] = None
-    video_url: Optional[str] = Field(None, max_length=1000)
-    duration: Optional[int] = Field(None, ge=0)
-
-
-class EpisodeResponse(EpisodeBase):
-    id: UUID
-    movie_id: UUID
-
-
 class MovieBase(BaseSchema):
     name: str = Field(..., max_length=255)
     description: Optional[str] = None

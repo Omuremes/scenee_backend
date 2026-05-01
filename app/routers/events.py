@@ -42,7 +42,16 @@ def _resolve_offset(offset: int, skip: Optional[int]) -> int:
 def _to_event_list_response(event) -> EventListResponse:
     upcoming_sessions = sorted(getattr(event, "sessions", []) or [], key=lambda item: item.starts_at)
     next_session = upcoming_sessions[0] if upcoming_sessions else None
-    min_price = min((session.base_price for session in upcoming_sessions), default=getattr(event, "price", None))
+    seat_prices = [
+        seat.price
+        for session in upcoming_sessions
+        if session.pricing_type == "per_seat"
+        for seat in (session.seats or [])
+    ]
+    min_price = min(seat_prices) if seat_prices else min(
+        (session.base_price for session in upcoming_sessions),
+        default=getattr(event, "price", None),
+    )
 
     return EventListResponse(
         id=event.id,

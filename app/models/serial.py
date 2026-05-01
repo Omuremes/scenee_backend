@@ -1,4 +1,5 @@
 import uuid
+import logging
 from sqlalchemy import Column, String, Integer, ForeignKey, Text, Table, UniqueConstraint, Float, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -6,6 +7,9 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 
 from app.core.database import Base
+
+
+logger = logging.getLogger(__name__)
 
 
 serial_actors = Table(
@@ -97,5 +101,15 @@ class EpisodeFile(Base):
     def video_url(self):
         from app.core.minio import get_presigned_url_sync
         if self.minio_bucket and self.minio_object_key:
-            return get_presigned_url_sync(self.minio_bucket, self.minio_object_key, expires=3600)
+            try:
+                return get_presigned_url_sync(self.minio_bucket, self.minio_object_key, expires=3600)
+            except ValueError as exc:
+                logger.warning(
+                    "Could not generate episode file URL for episode_file_id=%s bucket=%s key=%s: %s",
+                    self.id,
+                    self.minio_bucket,
+                    self.minio_object_key,
+                    exc,
+                )
+                return None
         return None

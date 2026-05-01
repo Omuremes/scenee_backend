@@ -13,9 +13,7 @@ def test_movie_response_preserves_stored_public_poster_urls():
     movie = Movie(
         name="Arrival",
         description="First contact",
-        is_series=False,
         duration_minutes=116,
-        seasons_count=1,
         average_rating=8.9,
     )
     movie.id = movie_id
