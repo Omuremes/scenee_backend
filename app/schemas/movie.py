@@ -74,6 +74,10 @@ class PosterBase(BaseSchema):
     storage_path: Optional[str] = Field(None, max_length=1000)
     is_primary: bool = False
 
+    @validator("url", pre=True, allow_reuse=True)
+    def normalize_url(cls, value):
+        return to_public_url(value) or value
+
 
 class PosterResponse(PosterBase):
     id: UUID

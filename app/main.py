@@ -1,6 +1,9 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.minio import ensure_media_bucket
 from app.routers import (
     admin_events_router,
     admin_actors_router,
@@ -16,6 +19,8 @@ from app.routers import (
     serials_router,
     reviews_router,
 )
+
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
@@ -45,6 +50,14 @@ app.include_router(admin_events_router)
 app.include_router(bookings_router)
 app.include_router(favorites_router)
 app.include_router(reviews_router)
+
+
+@app.on_event("startup")
+async def configure_media_storage():
+    try:
+        ensure_media_bucket()
+    except Exception as exc:
+        logger.warning("Could not configure MinIO media bucket: %s", exc)
 
 
 @app.get("/")

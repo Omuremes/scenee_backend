@@ -5,10 +5,15 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.movie import Movie, Poster
+from app.core import minio as minio_module
 from app.schemas.movie import MovieCreate, MovieResponse
 
 
-def test_movie_response_preserves_stored_public_poster_urls():
+def test_movie_response_normalizes_stale_minio_poster_urls(monkeypatch):
+    monkeypatch.setattr(minio_module.settings, "MINIO_ENDPOINT", "minio:9000")
+    monkeypatch.setattr(minio_module.settings, "MINIO_BUCKET_NAME", "cinescope-media")
+    monkeypatch.setattr(minio_module.settings, "MINIO_PUBLIC_BASE_URL", "http://192.168.68.124:9000")
+
     movie_id = uuid4()
     movie = Movie(
         name="Arrival",
@@ -30,9 +35,9 @@ def test_movie_response_preserves_stored_public_poster_urls():
 
     payload = MovieResponse.model_validate(movie)
 
-    assert payload.posters[0].url == "http://192.168.68.150:9000/cinescope-media/posters/arrival.jpg"
+    assert payload.posters[0].url == "http://192.168.68.124:9000/cinescope-media/posters/arrival.jpg"
     assert payload.primary_poster is not None
-    assert payload.primary_poster.url == "http://192.168.68.150:9000/cinescope-media/posters/arrival.jpg"
+    assert payload.primary_poster.url == "http://192.168.68.124:9000/cinescope-media/posters/arrival.jpg"
 
 
 def test_movie_create_strips_and_validates_poster_url():
