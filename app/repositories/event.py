@@ -52,6 +52,20 @@ class EventRepository(BaseRepository[Event]):
     def __init__(self, db: AsyncSession):
         super().__init__(Event, db)
 
+    @staticmethod
+    def _apply_query(stmt, query: Optional[str]):
+        if not query:
+            return stmt
+        pattern = f"%{query}%"
+        return stmt.where(
+            Event.title.ilike(pattern)
+            | Event.description.ilike(pattern)
+            | Event.city.ilike(pattern)
+            | Event.category.has(
+                EventCategory.name.ilike(pattern) | EventCategory.slug.ilike(pattern)
+            )
+        )
+
     async def get_with_details(self, event_id: UUID) -> Optional[Event]:
         result = await self.db.execute(
             select(Event)
@@ -63,6 +77,7 @@ class EventRepository(BaseRepository[Event]):
     async def get_upcoming_events(
         self,
         city: Optional[str] = None,
+        query: Optional[str] = None,
         event_type: Optional[str] = None,
         category_id: Optional[UUID] = None,
         category_slug: Optional[str] = None,
@@ -76,6 +91,7 @@ class EventRepository(BaseRepository[Event]):
             .where(Event.sessions.any(EventSession.starts_at >= datetime.utcnow()))
         )
 
+        stmt = self._apply_query(stmt, query)
         if city:
             stmt = stmt.where(Event.city.ilike(f"%{city}%"))
         if event_type:
@@ -94,11 +110,13 @@ class EventRepository(BaseRepository[Event]):
         self,
         event_type: Optional[str] = None,
         city: Optional[str] = None,
+        query: Optional[str] = None,
         category_id: Optional[UUID] = None,
         skip: int = 0,
         limit: int = 20,
     ) -> List[Event]:
         stmt = select(Event).options(*_event_details_options())
+        stmt = self._apply_query(stmt, query)
         if event_type:
             stmt = stmt.where(Event.type == event_type)
         if city:
@@ -114,9 +132,11 @@ class EventRepository(BaseRepository[Event]):
         self,
         event_type: Optional[str] = None,
         city: Optional[str] = None,
+        query: Optional[str] = None,
         category_id: Optional[UUID] = None,
     ) -> int:
         stmt = select(func.count(Event.id))
+        stmt = self._apply_query(stmt, query)
         if event_type:
             stmt = stmt.where(Event.type == event_type)
         if city:

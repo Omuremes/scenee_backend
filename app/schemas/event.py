@@ -1,12 +1,28 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from uuid import UUID
 
 from pydantic import Field, root_validator, validator
+from pydantic.datetime_parse import parse_datetime
 
 from app.core.minio import to_public_url
 from app.schemas.base import BaseSchema
+
+
+def _to_naive_datetime(value: Optional[datetime | str]) -> Optional[datetime]:
+    if value is None:
+        return value
+    if isinstance(value, str):
+        parsed = parse_datetime(value)
+        if parsed is None:
+            return value
+        if parsed.tzinfo is None:
+            return parsed
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 class EventType(str, Enum):
@@ -139,6 +155,10 @@ class EventSessionBase(BaseSchema):
     cinema_name: Optional[str] = Field(None, max_length=255)
     hall_name: Optional[str] = Field(None, max_length=100)
 
+    @validator("starts_at", "ends_at", pre=True, allow_reuse=True)
+    def normalize_datetime_fields(cls, value):
+        return _to_naive_datetime(value)
+
     @root_validator
     def validate_interval(cls, values):
         starts_at = values.get("starts_at")
@@ -159,6 +179,10 @@ class EventSessionUpdate(BaseSchema):
     pricing_type: Optional[SessionPricingType] = None
     cinema_name: Optional[str] = Field(None, max_length=255)
     hall_name: Optional[str] = Field(None, max_length=100)
+
+    @validator("starts_at", "ends_at", pre=True, allow_reuse=True)
+    def normalize_datetime_fields(cls, value):
+        return _to_naive_datetime(value)
 
     @root_validator
     def validate_interval(cls, values):
@@ -197,6 +221,10 @@ class EventBase(BaseSchema):
     max_capacity: Optional[int] = Field(None, ge=0)
     available_seats: Optional[int] = Field(None, ge=0)
     storage_path: Optional[str] = Field(None, max_length=1000)
+
+    @validator("start_datetime", "end_datetime", pre=True, allow_reuse=True)
+    def normalize_datetime_fields(cls, value):
+        return _to_naive_datetime(value)
 
     @root_validator(pre=True)
     def normalize_legacy_fields(cls, values):

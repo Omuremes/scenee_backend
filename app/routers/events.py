@@ -1,11 +1,15 @@
+import os
+import tempfile
+from pathlib import Path
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.minio import upload_file
 from app.core.security import get_current_admin_user
 from app.models import User
 from app.schemas import (
@@ -81,6 +85,7 @@ def _normalize_type_filter(type_filter: Optional[EventType], event_type: Optiona
 @public_router.get("/", response_model=list[EventListResponse])
 async def get_events(
     city: Optional[str] = Query(None, description="Filter by city"),
+    query: Optional[str] = Query(None, description="Search query"),
     type_filter: Optional[EventType] = Query(None, alias="type", description="Filter by event type"),
     event_type: Optional[EventType] = Query(None, description="Deprecated alias for type"),
     category_id: Optional[UUID] = Query(None, description="Filter by category id"),
@@ -92,6 +97,7 @@ async def get_events(
     event_service = EventService(db)
     events = await event_service.get_upcoming_events(
         city=city,
+        query=query,
         event_type=_normalize_type_filter(type_filter, event_type),
         category_id=category_id,
         category_slug=category,
@@ -314,6 +320,7 @@ async def admin_get_events(
     type_filter: Optional[EventType] = Query(None, alias="type"),
     event_type: Optional[EventType] = Query(None, description="Deprecated alias for type"),
     city: Optional[str] = Query(None),
+    query: Optional[str] = Query(None),
     category_id: Optional[UUID] = Query(None),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     skip: Optional[int] = Query(None, ge=0, description="Deprecated alias for offset"),
@@ -326,6 +333,7 @@ async def admin_get_events(
     events, total = await event_service.list_events(
         event_type=_normalize_type_filter(type_filter, event_type),
         city=city,
+        query=query,
         category_id=category_id,
         skip=resolved_offset,
         limit=limit,
@@ -350,6 +358,66 @@ async def create_event(
         event = await event_service.create_event(event_data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    return EventResponse.model_validate(event)
+
+
+@admin_router.post("/{event_id}/poster", response_model=EventResponse)
+async def upload_event_poster(
+    event_id: UUID,
+    poster: UploadFile = File(...),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if poster.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+        raise HTTPException(status_code=400, detail="Invalid poster format. Use image/jpeg, image/png or image/webp")
+
+    suffix = Path(poster.filename or "").suffix or ".jpg"
+    poster_key = f"events/posters/{uuid4()}{suffix}"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await poster.read())
+        temp_path = temp_file.name
+
+    try:
+        poster_url = await upload_file(settings.MINIO_BUCKET_NAME, poster_key, temp_path, content_type=poster.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    event_service = EventService(db)
+    event = await event_service.update_event(event_id, EventUpdate(poster_url=poster_url))
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return EventResponse.model_validate(event)
+
+
+@admin_router.post("/{event_id}/trailer", response_model=EventResponse)
+async def upload_event_trailer(
+    event_id: UUID,
+    trailer: UploadFile = File(...),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if trailer.content_type not in ["video/mp4", "video/x-matroska"]:
+        raise HTTPException(status_code=400, detail="Invalid trailer format. Use video/mp4 or video/x-matroska")
+
+    suffix = Path(trailer.filename or "").suffix or ".mp4"
+    trailer_key = f"events/trailers/{uuid4()}{suffix}"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await trailer.read())
+        temp_path = temp_file.name
+
+    try:
+        trailer_url = await upload_file(settings.MINIO_BUCKET_NAME, trailer_key, temp_path, content_type=trailer.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    event_service = EventService(db)
+    event = await event_service.update_event(event_id, EventUpdate(trailer_url=trailer_url))
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
     return EventResponse.model_validate(event)
 
 

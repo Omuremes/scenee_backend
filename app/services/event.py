@@ -106,6 +106,7 @@ class EventService(BaseService[EventRepository]):
     async def get_upcoming_events(
         self,
         city: Optional[str] = None,
+        query: Optional[str] = None,
         event_type: Optional[str] = None,
         category_id: Optional[UUID] = None,
         category_slug: Optional[str] = None,
@@ -115,6 +116,7 @@ class EventService(BaseService[EventRepository]):
         normalized_type = normalize_event_type(event_type)
         return await self.repository.get_upcoming_events(
             city=city,
+            query=query,
             event_type=normalized_type,
             category_id=category_id,
             category_slug=category_slug,
@@ -126,13 +128,14 @@ class EventService(BaseService[EventRepository]):
         self,
         event_type: Optional[str] = None,
         city: Optional[str] = None,
+        query: Optional[str] = None,
         category_id: Optional[UUID] = None,
         skip: int = 0,
         limit: int = 20,
     ) -> tuple[List[dict], int]:
         normalized_type = normalize_event_type(event_type)
-        events = await self.repository.list_events(normalized_type, city, category_id, skip, limit)
-        total = await self.repository.count_events(normalized_type, city, category_id)
+        events = await self.repository.list_events(normalized_type, city, query, category_id, skip, limit)
+        total = await self.repository.count_events(normalized_type, city, query, category_id)
         return events, total
 
     async def create_event(self, event_data: EventCreate) -> dict:
