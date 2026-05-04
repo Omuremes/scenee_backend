@@ -7,6 +7,7 @@ from .event import EventCategoryService, EventService, VenueService
 from .booking import BookingService
 from .favorite import FavoriteService
 from .review import ReviewService, EventReviewService
+from .serial_review import SerialReviewService
 
 __all__ = [
     "BaseService",
@@ -18,4 +19,5 @@ __all__ = [
     "BookingService",
     "FavoriteService",
     "ReviewService", "EventReviewService",
+    "SerialReviewService",
 ]

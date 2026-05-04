@@ -42,6 +42,7 @@ def _build_serial(serial_id=None):
         categories=[category],
         actors=[],
         seasons=[season],
+        reviews=[],
         poster_url="https://minio.example.com/posters/dark-matter.jpg"
     )
 

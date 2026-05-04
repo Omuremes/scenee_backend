@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.serial import Serial, Season, SerialEpisode, EpisodeFile
+from app.models.serial import Serial, Season, SerialEpisode, EpisodeFile, SerialReview
 from app.models.movie import Actor, MovieCategory
 from sqlalchemy import or_, desc, case
 from datetime import datetime, timedelta
@@ -22,7 +22,8 @@ class SerialRepository:
             .options(
                 selectinload(Serial.actors),
                 selectinload(Serial.categories),
-                selectinload(Serial.seasons).selectinload(Season.episodes).selectinload(SerialEpisode.episode_file)
+                selectinload(Serial.seasons).selectinload(Season.episodes).selectinload(SerialEpisode.episode_file),
+                selectinload(Serial.reviews).selectinload(SerialReview.user),
             )
             .where(Serial.id == serial_id)
         )
@@ -101,7 +102,8 @@ class SerialRepository:
         serial = Serial(
             name=data.get("name"),
             description=data.get("description"),
-            poster_key=data.get("poster_key")
+            poster_key=data.get("poster_key"),
+            trailer_video_key=data.get("trailer_video_key")
         )
         serial.actors = actors
         serial.categories = categories
@@ -116,6 +118,8 @@ class SerialRepository:
             serial.description = data["description"]
         if "poster_key" in data:
             serial.poster_key = data["poster_key"]
+        if "trailer_video_key" in data:
+            serial.trailer_video_key = data["trailer_video_key"]
         
         if actors is not None:
             serial.actors = actors

@@ -7,6 +7,7 @@ from .event import EventCategoryRepository, EventRepository, EventSeatRepository
 from .booking import BookingRepository
 from .favorite import FavoriteRepository
 from .review import ReviewRepository, EventReviewRepository
+from .serial_review import SerialReviewRepository
 
 __all__ = [
     "BaseRepository",
@@ -18,4 +19,5 @@ __all__ = [
     "BookingRepository",
     "FavoriteRepository",
     "ReviewRepository", "EventReviewRepository",
+    "SerialReviewRepository",
 ]

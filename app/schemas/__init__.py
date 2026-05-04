@@ -11,6 +11,7 @@ from .serial import (
     SeasonBase, SeasonCreate, SeasonUpdate, SeasonResponse,
     SerialBase, SerialCreate, SerialUpdate, SerialResponse, SerialListResponse, SerialPageResponse
 )
+from .serial_review import SerialReviewBase, SerialReviewCreate, SerialReviewUpdate, SerialReviewResponse
 from .review import ReviewBase, ReviewCreate, ReviewUpdate, ReviewResponse, ReviewUserResponse
 from .event import (
     EventType, SessionPricingType,
@@ -46,4 +47,5 @@ __all__ = [
     "EpisodeFileBase", "EpisodeFileResponse", "SerialEpisodeBase", "SerialEpisodeCreate", "SerialEpisodeUpdate", "SerialEpisodeResponse",
     "SeasonBase", "SeasonCreate", "SeasonUpdate", "SeasonResponse",
     "SerialBase", "SerialCreate", "SerialUpdate", "SerialResponse", "SerialListResponse", "SerialPageResponse",
+    "SerialReviewBase", "SerialReviewCreate", "SerialReviewUpdate", "SerialReviewResponse",
 ]

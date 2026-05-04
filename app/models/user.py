@@ -22,3 +22,4 @@ class User(Base):
     bookings = relationship("Booking", back_populates="user", cascade="all, delete-orphan")
     favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
     event_reviews = relationship("EventReview", back_populates="user", cascade="all, delete-orphan")
+    serial_reviews = relationship("SerialReview", back_populates="user", cascade="all, delete-orphan")

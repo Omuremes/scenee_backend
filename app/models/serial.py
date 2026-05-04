@@ -1,6 +1,6 @@
 import uuid
 import logging
-from sqlalchemy import Column, String, Integer, ForeignKey, Text, Table, UniqueConstraint, Float, DateTime
+from sqlalchemy import CheckConstraint, Column, String, Integer, ForeignKey, Text, Table, UniqueConstraint, Float, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -34,6 +34,7 @@ class Serial(Base):
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     poster_key = Column(String(1000), nullable=True)
+    trailer_video_key = Column(String(1000), nullable=True)
     average_rating = Column(Float, default=0.0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -41,6 +42,7 @@ class Serial(Base):
     actors = relationship("Actor", secondary=serial_actors, backref="serials")
     categories = relationship("MovieCategory", secondary=serial_category_links, backref="serials")
     seasons = relationship("Season", back_populates="serial", cascade="all, delete-orphan", order_by="Season.season_number")
+    reviews = relationship("SerialReview", back_populates="serial", cascade="all, delete-orphan")
 
     @property
     def poster_url(self):
@@ -49,6 +51,25 @@ class Serial(Base):
 
         if self.poster_key:
             return build_public_object_url(settings.MINIO_BUCKET_NAME, self.poster_key)
+        return None
+
+    @property
+    def trailer_url(self):
+        from app.core.config import settings
+        from app.core.minio import get_presigned_url_sync
+
+        if self.trailer_video_key:
+            try:
+                return get_presigned_url_sync(settings.MINIO_BUCKET_NAME, self.trailer_video_key, expires=3600)
+            except ValueError as exc:
+                logger.warning(
+                    "Could not generate trailer URL for serial_id=%s bucket=%s key=%s: %s",
+                    self.id,
+                    settings.MINIO_BUCKET_NAME,
+                    self.trailer_video_key,
+                    exc,
+                )
+                return None
         return None
 
 
@@ -113,3 +134,21 @@ class EpisodeFile(Base):
                 )
                 return None
         return None
+
+
+class SerialReview(Base):
+    __tablename__ = "serial_reviews"
+    __table_args__ = (
+        CheckConstraint("rating >= 1.0 AND rating <= 5.0", name="ck_serial_review_rating"),
+        UniqueConstraint("serial_id", "user_id", name="uq_serial_review_serial_user"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    serial_id = Column(UUID(as_uuid=True), ForeignKey("serials.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    rating = Column(Float, nullable=False)
+    text = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    serial = relationship("Serial", back_populates="reviews")
+    user = relationship("User", back_populates="serial_reviews")

@@ -3,8 +3,9 @@ from uuid import uuid4
 
 import pytest
 
-from app.schemas import EventReviewCreate, EventReviewUpdate, ReviewCreate
+from app.schemas import EventReviewCreate, EventReviewUpdate, ReviewCreate, SerialReviewCreate, SerialReviewUpdate
 from app.services.review import EventReviewService, ReviewService
+from app.services.serial_review import SerialReviewService
 
 
 class FakeReviewRepository:
@@ -89,6 +90,69 @@ class FakeEventExistsRepository:
         return SimpleNamespace(id=item_id, type=self._event_type)
 
 
+class FakeSerialReviewRepository:
+    def __init__(self):
+        self.review = None
+        self.created_payload = None
+        self.updated_payload = None
+        self.rating_updates = 0
+
+    async def get_by_id(self, review_id):
+        if self.review and self.review.id == review_id:
+            return self.review
+        return None
+
+    async def get_by_serial_and_user(self, serial_id, user_id):
+        return self.review
+
+    async def create(self, data):
+        self.created_payload = data
+        return SimpleNamespace(id=uuid4(), serial_id=data["serial_id"], user_id=data["user_id"])
+
+    async def update(self, review_id, data):
+        self.updated_payload = data
+        return self.review
+
+    async def get_with_user(self, review_id):
+        return SimpleNamespace(
+            id=review_id,
+            serial_id=uuid4(),
+            user_id=uuid4(),
+            rating=4.0,
+            text="great",
+            user=SimpleNamespace(id=uuid4(), username="user", avatar_url="https://cdn/avatar.png"),
+        )
+
+    async def update_serial_rating(self, serial_id):
+        self.rating_updates += 1
+
+    async def delete(self, review_id):
+        return True
+
+    async def get_serial_reviews(self, serial_id, skip, limit):
+        return [
+            SimpleNamespace(
+                id=uuid4(),
+                serial_id=serial_id,
+                user_id=uuid4(),
+                rating=3.5,
+                text="Nice",
+                created_at="2026-05-04T12:00:00",
+                user=SimpleNamespace(id=uuid4(), username="fan", avatar_url=None),
+            )
+        ]
+
+
+class FakeSerialExistsRepository:
+    def __init__(self, exists=True):
+        self._exists = exists
+
+    async def get_by_id(self, item_id):
+        if not self._exists:
+            return None
+        return SimpleNamespace(id=item_id)
+
+
 @pytest.mark.asyncio
 async def test_create_movie_review_rejects_duplicate_review():
     service = object.__new__(ReviewService)
@@ -140,6 +204,70 @@ async def test_get_event_reviews_requires_cinema_event():
 
     with pytest.raises(ValueError, match="only available for cinema"):
         await service.get_event_reviews(uuid4())
+
+
+@pytest.mark.asyncio
+async def test_create_serial_review_upserts_and_recomputes_rating():
+    service = object.__new__(SerialReviewService)
+    repository = FakeSerialReviewRepository()
+    service.repository = repository
+    service.serial_repository = FakeSerialExistsRepository(exists=True)
+
+    review = await service.create_or_update_serial_review(
+        uuid4(),
+        SerialReviewCreate(serial_id=uuid4(), rating=4.0, text="  Great series  "),
+    )
+
+    assert repository.created_payload["text"] == "Great series"
+    assert repository.rating_updates == 1
+    assert review.user.username == "user"
+
+
+@pytest.mark.asyncio
+async def test_update_serial_review_requires_owner_and_refreshes_rating():
+    service = object.__new__(SerialReviewService)
+    repository = FakeSerialReviewRepository()
+    review_id = uuid4()
+    owner_id = uuid4()
+    repository.review = SimpleNamespace(id=review_id, serial_id=uuid4(), user_id=owner_id)
+    service.repository = repository
+    service.serial_repository = FakeSerialExistsRepository(exists=True)
+
+    review = await service.update_serial_review(
+        review_id,
+        owner_id,
+        SerialReviewUpdate(rating=5.0, text="  Updated  "),
+    )
+
+    assert repository.updated_payload == {"rating": 5.0, "text": "Updated"}
+    assert repository.rating_updates == 1
+    assert review.user.username == "user"
+
+
+@pytest.mark.asyncio
+async def test_delete_serial_review_requires_owner():
+    service = object.__new__(SerialReviewService)
+    repository = FakeSerialReviewRepository()
+    serial_id = uuid4()
+    owner_id = uuid4()
+    repository.review = SimpleNamespace(id=uuid4(), serial_id=serial_id, user_id=owner_id)
+    service.repository = repository
+    service.serial_repository = FakeSerialExistsRepository(exists=True)
+
+    success = await service.delete_serial_review(repository.review.id, owner_id)
+
+    assert success is True
+    assert repository.rating_updates == 1
+
+
+@pytest.mark.asyncio
+async def test_get_serial_reviews_requires_existing_serial():
+    service = object.__new__(SerialReviewService)
+    service.repository = FakeSerialReviewRepository()
+    service.serial_repository = FakeSerialExistsRepository(exists=False)
+
+    with pytest.raises(ValueError, match="Serial not found"):
+        await service.get_serial_reviews(uuid4())
 
 
 @pytest.mark.asyncio

@@ -159,6 +159,37 @@ async def upload_serial_poster(
 
     return serial
 
+
+@admin_router.post("/{serial_id}/trailer", response_model=SerialResponse)
+async def upload_serial_trailer(
+    serial_id: UUID,
+    trailer: UploadFile = File(...),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if trailer.content_type not in ["video/mp4", "video/x-matroska"]:
+        raise HTTPException(status_code=400, detail="Invalid trailer format. Use video/mp4 or video/x-matroska")
+
+    suffix = Path(trailer.filename or "").suffix or ".mp4"
+    trailer_key = f"serials/trailers/{uuid4()}{suffix}"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await trailer.read())
+        temp_path = temp_file.name
+
+    try:
+        await upload_file(settings.MINIO_BUCKET_NAME, trailer_key, temp_path, content_type=trailer.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    service = SerialService(db)
+    serial = await service.update(serial_id, SerialUpdate(trailer_video_key=trailer_key))
+    if not serial:
+        raise HTTPException(status_code=404, detail="Serial not found")
+
+    return serial
+
 @admin_router.post("/{serial_id}/seasons/", response_model=SeasonResponse, status_code=status.HTTP_201_CREATED)
 async def add_season(
     serial_id: UUID,

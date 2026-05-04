@@ -6,6 +6,7 @@ from pydantic import Field
 
 from app.schemas.base import BaseSchema
 from app.schemas.movie import ActorResponse, MovieCategoryResponse
+from app.schemas.serial_review import SerialReviewResponse
 
 
 class EpisodeFileBase(BaseSchema):
@@ -74,6 +75,7 @@ class SerialBase(BaseSchema):
 
 class SerialCreate(SerialBase):
     poster_key: Optional[str] = None
+    trailer_video_key: Optional[str] = None
     actors: List[UUID] = Field(default_factory=list)
     categories: List[UUID] = Field(default_factory=list)
     seasons: List[SeasonCreate] = Field(default_factory=list)
@@ -83,6 +85,7 @@ class SerialUpdate(BaseSchema):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     poster_key: Optional[str] = None
+    trailer_video_key: Optional[str] = None
     actors: Optional[List[UUID]] = None
     categories: Optional[List[UUID]] = None
 
@@ -91,12 +94,15 @@ class SerialResponse(SerialBase):
     id: UUID
     poster_key: Optional[str] = None
     poster_url: Optional[str] = None
+    trailer_video_key: Optional[str] = None
+    trailer_url: Optional[str] = None
     average_rating: float
     created_at: datetime
     updated_at: Optional[datetime] = None
     categories: List[MovieCategoryResponse] = Field(default_factory=list)
     actors: List[ActorResponse] = Field(default_factory=list)
     seasons: List[SeasonResponse] = Field(default_factory=list)
+    reviews: List[SerialReviewResponse] = Field(default_factory=list)
 
 
 class SerialListResponse(BaseSchema):
@@ -104,6 +110,7 @@ class SerialListResponse(BaseSchema):
     name: str
     poster_key: Optional[str] = None
     poster_url: Optional[str] = None
+    trailer_url: Optional[str] = None
     average_rating: float
     created_at: datetime
     categories: List[MovieCategoryResponse] = Field(default_factory=list)

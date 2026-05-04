@@ -14,8 +14,12 @@ from app.schemas import (
     ReviewCreate,
     ReviewResponse,
     ReviewUpdate,
+    SerialReviewCreate,
+    SerialReviewResponse,
+    SerialReviewUpdate,
 )
 from app.services import EventReviewService, ReviewService
+from app.services.serial_review import SerialReviewService
 
 router = APIRouter(prefix="/v1/reviews", tags=["reviews"])
 
@@ -127,3 +131,59 @@ async def get_event_reviews(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return [EventReviewResponse.model_validate(review) for review in reviews]
+
+
+@router.post("/serials", response_model=SerialReviewResponse)
+async def create_serial_review(
+    review_data: SerialReviewCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    serial_review_service = SerialReviewService(db)
+    try:
+        review = await serial_review_service.create_or_update_serial_review(current_user.id, review_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return SerialReviewResponse.model_validate(review)
+
+
+@router.put("/serials/{review_id}", response_model=SerialReviewResponse)
+async def update_serial_review(
+    review_id: UUID,
+    review_data: SerialReviewUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    serial_review_service = SerialReviewService(db)
+    review = await serial_review_service.update_serial_review(review_id, current_user.id, review_data)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found or access denied")
+    return SerialReviewResponse.model_validate(review)
+
+
+@router.delete("/serials/{review_id}", response_model=dict)
+async def delete_serial_review(
+    review_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    serial_review_service = SerialReviewService(db)
+    success = await serial_review_service.delete_serial_review(review_id, current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Review not found or access denied")
+    return {"message": "Review deleted"}
+
+
+@router.get("/serials/{serial_id}", response_model=List[SerialReviewResponse])
+async def get_serial_reviews(
+    serial_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    serial_review_service = SerialReviewService(db)
+    try:
+        reviews = await serial_review_service.get_serial_reviews(serial_id, skip, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return [SerialReviewResponse.model_validate(review) for review in reviews]

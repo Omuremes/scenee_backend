@@ -227,8 +227,6 @@ class EventBase(BaseSchema):
         if value is None:
             return value
         normalized = value.strip()
-        if not normalized:
-            raise ValueError("City cannot be empty")
         return normalized
 
 
@@ -294,8 +292,6 @@ class EventUpdate(BaseSchema):
         if value is None:
             return value
         normalized = value.strip()
-        if not normalized:
-            raise ValueError("City cannot be empty")
         return normalized
 
 
