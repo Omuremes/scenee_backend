@@ -40,11 +40,13 @@ class ActorBase(BaseSchema):
     photo_url: Optional[str] = Field(None, max_length=500)
     bio: Optional[str] = None
 
-
-class ActorCreate(ActorBase):
     @validator("photo_url", pre=True, allow_reuse=True)
     def normalize_photo_url(cls, value):
         return to_public_url(value)
+
+
+class ActorCreate(ActorBase):
+    pass
 
 
 class ActorUpdate(BaseSchema):

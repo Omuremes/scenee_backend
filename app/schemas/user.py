@@ -3,11 +3,16 @@ from typing import Optional
 from datetime import datetime
 from uuid import UUID
 from app.schemas.base import BaseSchema
+from app.core.minio import to_public_url
 
 
 class UserBase(BaseSchema):
     username: Optional[str] = Field(None, max_length=100)
     avatar_url: Optional[str] = Field(None, max_length=1000)
+
+    @validator("avatar_url", pre=True, allow_reuse=True)
+    def normalize_avatar_url(cls, value):
+        return to_public_url(value)
 
 
 class UserSync(UserBase):

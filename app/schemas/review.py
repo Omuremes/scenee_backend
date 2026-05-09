@@ -2,15 +2,20 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, validator
 
 from app.schemas.base import BaseSchema
+from app.core.minio import to_public_url
 
 
 class ReviewUserResponse(BaseSchema):
     id: UUID
     username: Optional[str] = None
     avatar_url: Optional[str] = None
+
+    @validator("avatar_url", pre=True, allow_reuse=True)
+    def normalize_avatar_url(cls, value):
+        return to_public_url(value)
 
 
 class ReviewBase(BaseSchema):
