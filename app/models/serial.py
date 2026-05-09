@@ -34,6 +34,7 @@ class Serial(Base):
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     poster_key = Column(String(1000), nullable=True)
+    trailer_poster_key = Column(String(1000), nullable=True)
     trailer_video_key = Column(String(1000), nullable=True)
     average_rating = Column(Float, default=0.0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -51,6 +52,15 @@ class Serial(Base):
 
         if self.poster_key:
             return build_public_object_url(settings.MINIO_BUCKET_NAME, self.poster_key)
+        return None
+
+    @property
+    def trailer_poster_url(self):
+        from app.core.config import settings
+        from app.core.minio import build_public_object_url
+
+        if self.trailer_poster_key:
+            return build_public_object_url(settings.MINIO_BUCKET_NAME, self.trailer_poster_key)
         return None
 
     @property

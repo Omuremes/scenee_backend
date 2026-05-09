@@ -103,6 +103,7 @@ class SerialRepository:
             name=data.get("name"),
             description=data.get("description"),
             poster_key=data.get("poster_key"),
+            trailer_poster_key=data.get("trailer_poster_key"),
             trailer_video_key=data.get("trailer_video_key")
         )
         serial.actors = actors
@@ -118,6 +119,8 @@ class SerialRepository:
             serial.description = data["description"]
         if "poster_key" in data:
             serial.poster_key = data["poster_key"]
+        if "trailer_poster_key" in data:
+            serial.trailer_poster_key = data["trailer_poster_key"]
         if "trailer_video_key" in data:
             serial.trailer_video_key = data["trailer_video_key"]
         

@@ -75,6 +75,7 @@ class SerialBase(BaseSchema):
 
 class SerialCreate(SerialBase):
     poster_key: Optional[str] = None
+    trailer_poster_key: Optional[str] = None
     trailer_video_key: Optional[str] = None
     actors: List[UUID] = Field(default_factory=list)
     categories: List[UUID] = Field(default_factory=list)
@@ -85,6 +86,7 @@ class SerialUpdate(BaseSchema):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     poster_key: Optional[str] = None
+    trailer_poster_key: Optional[str] = None
     trailer_video_key: Optional[str] = None
     actors: Optional[List[UUID]] = None
     categories: Optional[List[UUID]] = None
@@ -94,6 +96,8 @@ class SerialResponse(SerialBase):
     id: UUID
     poster_key: Optional[str] = None
     poster_url: Optional[str] = None
+    trailer_poster_key: Optional[str] = None
+    trailer_poster_url: Optional[str] = None
     trailer_video_key: Optional[str] = None
     trailer_url: Optional[str] = None
     average_rating: float
@@ -110,6 +114,7 @@ class SerialListResponse(BaseSchema):
     name: str
     poster_key: Optional[str] = None
     poster_url: Optional[str] = None
+    trailer_poster_url: Optional[str] = None
     trailer_url: Optional[str] = None
     average_rating: float
     created_at: datetime

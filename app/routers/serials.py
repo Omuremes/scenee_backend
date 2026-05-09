@@ -160,6 +160,37 @@ async def upload_serial_poster(
     return serial
 
 
+@admin_router.post("/{serial_id}/trailer-poster", response_model=SerialResponse)
+async def upload_serial_trailer_poster(
+    serial_id: UUID,
+    poster: UploadFile = File(...),
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if poster.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(status_code=400, detail="Invalid trailer poster format. Use image/jpeg or image/png")
+
+    suffix = Path(poster.filename or "").suffix or ".jpg"
+    poster_key = f"serials/trailer-posters/{uuid4()}{suffix}"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        temp_file.write(await poster.read())
+        temp_path = temp_file.name
+
+    try:
+        await upload_file(settings.MINIO_BUCKET_NAME, poster_key, temp_path, content_type=poster.content_type)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    service = SerialService(db)
+    serial = await service.update(serial_id, SerialUpdate(trailer_poster_key=poster_key))
+    if not serial:
+        raise HTTPException(status_code=404, detail="Serial not found")
+
+    return serial
+
+
 @admin_router.post("/{serial_id}/trailer", response_model=SerialResponse)
 async def upload_serial_trailer(
     serial_id: UUID,
