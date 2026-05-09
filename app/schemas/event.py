@@ -2,10 +2,13 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from uuid import UUID
+from urllib.parse import urlsplit
 
 from pydantic import Field, root_validator, validator
 from pydantic.datetime_parse import parse_datetime
 
+from app.core.config import settings
+from app.core.minio import build_public_object_url
 from app.core.minio import to_public_url
 from app.schemas.base import BaseSchema
 
@@ -63,6 +66,38 @@ def normalize_event_type(value: Optional[str]) -> Optional[str]:
     raw_value = value.value if isinstance(value, Enum) else value
     normalized = str(raw_value).strip().lower()
     return EVENT_TYPE_ALIASES.get(normalized, normalized)
+
+
+def _storage_path_from_url(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+
+    parsed = urlsplit(value)
+    path = parsed.path.lstrip("/")
+    bucket_prefix = f"{settings.MINIO_BUCKET_NAME}/"
+    if path.startswith(bucket_prefix):
+        return path[len(bucket_prefix) :]
+    return None
+
+
+def _normalize_event_media_values(values):
+    if not isinstance(values, dict):
+        return values
+
+    storage_path = values.get("storage_path") or _storage_path_from_url(values.get("poster_url") or values.get("image_url"))
+    if storage_path is not None:
+        public_url = build_public_object_url(settings.MINIO_BUCKET_NAME, storage_path)
+        values["storage_path"] = storage_path
+        values["poster_url"] = public_url
+        values.setdefault("image_url", public_url)
+        return values
+
+    poster_url = values.get("poster_url") or values.get("image_url")
+    if poster_url is not None:
+        normalized_url = to_public_url(poster_url)
+        values["poster_url"] = normalized_url
+        values.setdefault("image_url", normalized_url)
+    return values
 
 
 class VenueBase(BaseSchema):
@@ -236,11 +271,7 @@ class EventBase(BaseSchema):
             values["type"] = normalized_type
             values.setdefault("event_type", normalized_type)
 
-        poster_url = values.get("poster_url") or values.get("image_url")
-        if poster_url is not None:
-            values["poster_url"] = poster_url
-            values.setdefault("image_url", poster_url)
-        return values
+        return _normalize_event_media_values(values)
 
     @validator("type", "event_type", pre=True, allow_reuse=True)
     def normalize_type_value(cls, value):
@@ -301,11 +332,7 @@ class EventUpdate(BaseSchema):
             values["type"] = normalized_type
             values.setdefault("event_type", normalized_type)
 
-        poster_url = values.get("poster_url") or values.get("image_url")
-        if poster_url is not None:
-            values["poster_url"] = poster_url
-            values.setdefault("image_url", poster_url)
-        return values
+        return _normalize_event_media_values(values)
 
     @validator("type", "event_type", pre=True, allow_reuse=True)
     def normalize_type_value(cls, value):
@@ -336,6 +363,10 @@ class EventResponse(EventBase):
     created_at: datetime
     updated_at: Optional[datetime]
 
+    @root_validator(pre=True)
+    def normalize_response_media(cls, values):
+        return _normalize_event_media_values(values)
+
 
 class EventListResponse(BaseSchema):
     id: UUID
@@ -344,6 +375,7 @@ class EventListResponse(BaseSchema):
     event_type: Optional[EventType] = None
     poster_url: Optional[str]
     image_url: Optional[str] = None
+    storage_path: Optional[str] = Field(None, max_length=1000)
     city: str = ""
     category: Optional[EventCategoryResponse] = None
     next_session_at: Optional[datetime] = None
@@ -356,6 +388,10 @@ class EventListResponse(BaseSchema):
     venue: Optional[VenueResponse] = None
     price: Optional[float] = None
     available_seats: Optional[int] = None
+
+    @root_validator(pre=True)
+    def normalize_response_media(cls, values):
+        return _normalize_event_media_values(values)
 
 
 class EventPageResponse(BaseSchema):

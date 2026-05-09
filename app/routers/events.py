@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.minio import upload_file
+from app.core.minio import build_public_object_url, upload_file
 from app.core.security import get_current_admin_user
 from app.models import User
 from app.schemas import (
@@ -32,7 +32,7 @@ from app.schemas import (
     EventType,
     EventUpdate,
 )
-from app.schemas.event import normalize_event_type
+from app.schemas.event import _storage_path_from_url, normalize_event_type
 from app.services import EventCategoryService, EventReviewService, EventService
 
 public_router = APIRouter(prefix="/v1/events", tags=["events"])
@@ -64,6 +64,7 @@ def _to_event_list_response(event) -> EventListResponse:
         event_type=event.event_type or event.type,
         poster_url=event.poster_url or event.image_url,
         image_url=event.image_url or event.poster_url,
+        storage_path=getattr(event, "storage_path", None),
         city=event.city,
         category=EventCategoryResponse.model_validate(event.category) if event.category else None,
         next_session_at=next_session.starts_at if next_session else getattr(event, "start_datetime", None),
@@ -80,6 +81,22 @@ def _to_event_list_response(event) -> EventListResponse:
 def _normalize_type_filter(type_filter: Optional[EventType], event_type: Optional[EventType]) -> Optional[str]:
     selected = type_filter or event_type
     return normalize_event_type(selected.value) if selected else None
+
+
+def _event_media_url(event) -> Optional[str]:
+    storage_path = getattr(event, "storage_path", None)
+    if storage_path:
+        return build_public_object_url(settings.MINIO_BUCKET_NAME, storage_path)
+
+    poster_url = getattr(event, "poster_url", None) or getattr(event, "image_url", None)
+    if not poster_url:
+        return None
+
+    inferred_storage_path = _storage_path_from_url(poster_url)
+    if inferred_storage_path:
+        return build_public_object_url(settings.MINIO_BUCKET_NAME, inferred_storage_path)
+
+    return poster_url
 
 
 @public_router.get("/", response_model=list[EventListResponse])
@@ -127,7 +144,12 @@ async def get_event(
     event = await event_service.get_event_with_details(event_id)
     if not event or not event.is_active:
         raise HTTPException(status_code=404, detail="Event not found")
-    return EventResponse.model_validate(event)
+    response = EventResponse.model_validate(event)
+    media_url = _event_media_url(event)
+    if media_url:
+        response.poster_url = media_url
+        response.image_url = media_url
+    return response
 
 
 @public_router.get("/{event_id}/seats", response_model=list[EventSeatResponse])
@@ -358,7 +380,12 @@ async def create_event(
         event = await event_service.create_event(event_data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return EventResponse.model_validate(event)
+    response = EventResponse.model_validate(event)
+    media_url = _event_media_url(event)
+    if media_url:
+        response.poster_url = media_url
+        response.image_url = media_url
+    return response
 
 
 @admin_router.post("/{event_id}/poster", response_model=EventResponse)
@@ -385,10 +412,15 @@ async def upload_event_poster(
             os.unlink(temp_path)
 
     event_service = EventService(db)
-    event = await event_service.update_event(event_id, EventUpdate(poster_url=poster_url))
+    event = await event_service.update_event(event_id, EventUpdate(storage_path=poster_key, poster_url=poster_url))
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return EventResponse.model_validate(event)
+    response = EventResponse.model_validate(event)
+    media_url = _event_media_url(event)
+    if media_url:
+        response.poster_url = media_url
+        response.image_url = media_url
+    return response
 
 
 @admin_router.post("/{event_id}/trailer", response_model=EventResponse)
@@ -418,7 +450,12 @@ async def upload_event_trailer(
     event = await event_service.update_event(event_id, EventUpdate(trailer_url=trailer_url))
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return EventResponse.model_validate(event)
+    response = EventResponse.model_validate(event)
+    media_url = _event_media_url(event)
+    if media_url:
+        response.poster_url = media_url
+        response.image_url = media_url
+    return response
 
 
 @admin_router.get("/{event_id}/sessions", response_model=list[EventSessionResponse])
@@ -484,7 +521,12 @@ async def admin_get_event(
     event = await event_service.get_event_with_details(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return EventResponse.model_validate(event)
+    response = EventResponse.model_validate(event)
+    media_url = _event_media_url(event)
+    if media_url:
+        response.poster_url = media_url
+        response.image_url = media_url
+    return response
 
 
 @admin_router.put("/{event_id}", response_model=EventResponse)
@@ -502,7 +544,12 @@ async def update_event(
         raise HTTPException(status_code=400, detail=str(exc))
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return EventResponse.model_validate(event)
+    response = EventResponse.model_validate(event)
+    media_url = _event_media_url(event)
+    if media_url:
+        response.poster_url = media_url
+        response.image_url = media_url
+    return response
 
 
 @admin_router.patch("/{event_id}/status", response_model=EventResponse)
@@ -516,7 +563,12 @@ async def update_event_status(
     event = await event_service.set_active(event_id, is_active)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    return EventResponse.model_validate(event)
+    response = EventResponse.model_validate(event)
+    media_url = _event_media_url(event)
+    if media_url:
+        response.poster_url = media_url
+        response.image_url = media_url
+    return response
 
 
 @admin_router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
