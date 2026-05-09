@@ -111,9 +111,19 @@ class SerialEpisode(Base):
     title = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
     duration = Column(Integer, nullable=True)  # in seconds
+    poster_key = Column(String(1000), nullable=True)
 
     season = relationship("Season", back_populates="episodes")
     episode_file = relationship("EpisodeFile", back_populates="episode", uselist=False, cascade="all, delete-orphan")
+
+    @property
+    def poster_url(self):
+        from app.core.config import settings
+        from app.core.minio import build_public_object_url
+
+        if self.poster_key:
+            return build_public_object_url(settings.MINIO_BUCKET_NAME, self.poster_key)
+        return None
 
 
 class EpisodeFile(Base):

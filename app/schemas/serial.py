@@ -2,11 +2,12 @@ from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, validator
 
 from app.schemas.base import BaseSchema
 from app.schemas.movie import ActorResponse, MovieCategoryResponse
 from app.schemas.serial_review import SerialReviewResponse
+from app.core.minio import to_public_url
 
 
 class EpisodeFileBase(BaseSchema):
@@ -30,7 +31,7 @@ class SerialEpisodeBase(BaseSchema):
 
 
 class SerialEpisodeCreate(SerialEpisodeBase):
-    pass
+    poster_key: Optional[str] = None
 
 
 class SerialEpisodeUpdate(BaseSchema):
@@ -38,12 +39,19 @@ class SerialEpisodeUpdate(BaseSchema):
     title: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     duration: Optional[int] = Field(None, ge=0)
+    poster_key: Optional[str] = None
 
 
 class SerialEpisodeResponse(SerialEpisodeBase):
     id: UUID
     season_id: UUID
+    poster_key: Optional[str] = None
+    poster_url: Optional[str] = None
     episode_file: Optional[EpisodeFileResponse] = None
+
+    @validator("poster_url", pre=True, allow_reuse=True)
+    def normalize_poster_url(cls, value):
+        return to_public_url(value)
 
 
 class SeasonBase(BaseSchema):

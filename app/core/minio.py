@@ -51,6 +51,7 @@ PUBLIC_READ_OBJECT_PREFIXES = (
     "serials/trailer-posters/*.jpg",
     "serials/trailer-posters/*.png",
     "serials/trailer-posters/*.webp",
+    "episodes/*",
 )
 
 

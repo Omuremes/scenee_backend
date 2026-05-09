@@ -187,7 +187,8 @@ class SerialRepository:
             episode_number=data["episode_number"],
             title=data.get("title"),
             description=data.get("description"),
-            duration=data.get("duration")
+            duration=data.get("duration"),
+            poster_key=data.get("poster_key")
         )
         self.db.add(episode)
         await self.db.flush()
@@ -202,6 +203,8 @@ class SerialRepository:
             episode.description = data["description"]
         if "duration" in data:
             episode.duration = data["duration"]
+        if "poster_key" in data:
+            episode.poster_key = data["poster_key"]
         await self.db.flush()
         return episode
 
