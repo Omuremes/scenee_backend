@@ -24,6 +24,8 @@ class BookingUpdate(BaseSchema):
 class BookingResponse(BookingBase):
     id: UUID
     user_id: UUID
+    poster_url: Optional[str] = None
+    image_url: Optional[str] = None
     total_price: float
     status: BookingStatus
     booking_reference: str

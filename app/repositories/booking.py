@@ -26,7 +26,13 @@ class BookingRepository(BaseRepository[Booking]):
 
     async def get_by_reference(self, reference: str) -> Optional[Booking]:
         result = await self.db.execute(
-            select(Booking).where(Booking.booking_reference == reference)
+            select(Booking)
+            .options(
+                selectinload(Booking.event),
+                selectinload(Booking.session),
+                selectinload(Booking.seat),
+            )
+            .where(Booking.booking_reference == reference)
         )
         return result.scalar_one_or_none()
 

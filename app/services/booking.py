@@ -53,6 +53,7 @@ class BookingService(BaseService[BookingRepository]):
 
         booking = await self.repository.create(create_data)
         await self.event_service.update_available_seats(event.id, booking_data.seats_count)
+        booking.event = event
         return booking
 
     async def get_user_bookings(self, user_id: UUID) -> List[dict]:
