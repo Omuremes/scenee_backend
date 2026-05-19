@@ -1,16 +1,20 @@
+import os
+import shutil
+import tempfile
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.firebase import verify_firebase_token
+from app.core.minio import upload_file
 from app.core.rate_limit import enforce_rate_limit, get_client_identifier
 from app.core.security import create_access_token, create_refresh_token, get_current_user, verify_refresh_token
 from app.models import User
-from app.schemas import RefreshTokenRequest, RegisterResponse, TokenResponse, UserLogin, UserRegister, UserResponse, UserSync
+from app.schemas import RefreshTokenRequest, RegisterResponse, TokenResponse, UserLogin, UserRegister, UserResponse, UserSync, UserUpdate
 from app.services import UserService
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -152,6 +156,56 @@ async def refresh_access_token(
 @router.get("/me", response_model=UserResponse)
 async def read_current_user(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_current_user(
+    user_data: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_service = UserService(db)
+    updated_user = await user_service.update_user(current_user.id, user_data)
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Update failed",
+        )
+    return UserResponse.model_validate(updated_user)
+
+
+@router.post("/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+
+    suffix = os.path.splitext(file.filename)[1] if file.filename else ".jpg"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        object_name = f"avatars/{current_user.id}{suffix}"
+        avatar_url = await upload_file(
+            settings.MINIO_BUCKET_NAME,
+            object_name,
+            tmp_path,
+            content_type=file.content_type
+        )
+
+        user_service = UserService(db)
+        updated_user = await user_service.update_user(current_user.id, UserUpdate(avatar_url=avatar_url))
+        if not updated_user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to update user avatar")
+        
+        return UserResponse.model_validate(updated_user)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 @router.post("/sync", response_model=UserResponse)
