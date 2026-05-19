@@ -310,6 +310,21 @@ async def admin_create_seat(
     return EventSeatResponse.model_validate(seat)
 
 
+@admin_router.post("/sessions/{session_id}/seats/bulk", response_model=list[EventSeatResponse], status_code=status.HTTP_201_CREATED)
+async def admin_bulk_create_seats(
+    session_id: UUID,
+    seats_data: list[EventSeatCreate],
+    _current_admin: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    event_service = EventService(db)
+    try:
+        seats = await event_service.bulk_create_seats(session_id, seats_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return [EventSeatResponse.model_validate(s) for s in seats]
+
+
 @admin_router.patch("/seats/{seat_id}", response_model=EventSeatResponse)
 async def admin_update_seat(
     seat_id: UUID,

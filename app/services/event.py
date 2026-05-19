@@ -223,6 +223,23 @@ class EventService(BaseService[EventRepository]):
         payload["session_id"] = session_id
         return await self.seat_repository.create(payload)
 
+    async def bulk_create_seats(self, session_id: UUID, seats_data: List[EventSeatCreate]):
+        session = await self.session_repository.get_with_details(session_id)
+        if not session:
+            raise ValueError("Session not found")
+        if session.event.type not in SEATED_EVENT_TYPES:
+            raise ValueError("Seats are only supported for cinema, concerts, stand-up, and sports events")
+        
+        results = []
+        for seat_data in seats_data:
+            payload = seat_data.model_dump()
+            payload["session_id"] = session_id
+            seat = await self.seat_repository.create(payload)
+            results.append(seat)
+        
+        await self._sync_legacy_event_from_sessions(session.event_id)
+        return results
+
     async def update_seat(self, seat_id: UUID, seat_data: EventSeatUpdate):
         payload = seat_data.model_dump(exclude_unset=True)
         if not payload:

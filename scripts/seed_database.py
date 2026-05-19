@@ -1,12 +1,3 @@
-"""Seed the local database with realistic test data.
-
-Run from the project root:
-    python scripts/seed_database.py
-
-The script is idempotent: running it again updates the same seed records instead
-of creating duplicate users, categories, movies, events, or serials.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -49,7 +40,7 @@ from app.models.booking import BookingStatus
 ModelT = TypeVar("ModelT")
 
 
-POSTER_BASE_URL = "https://placehold.co"
+POSTER_BASE_URL = "http://192.168.0.101:9000/cinescope-media/events/posters/"
 
 
 async def get_one(session: AsyncSession, model: type[ModelT], **filters: Any) -> ModelT | None:
@@ -115,13 +106,6 @@ async def seed_users(session: AsyncSession) -> dict[str, User]:
             "role": "admin",
             "username": "CineScope Admin",
             "avatar_url": f"{POSTER_BASE_URL}/160x160/111827/FFFFFF?text=Admin",
-        },
-        "alisa": {
-            "firebase_uid": "seed-alisa-firebase-uid",
-            "email": "alisa@cinescope.test",
-            "role": "user",
-            "username": "Alisa",
-            "avatar_url": f"{POSTER_BASE_URL}/160x160/1D4ED8/FFFFFF?text=A",
         },
         "timur": {
             "firebase_uid": "seed-timur-firebase-uid",

@@ -311,7 +311,7 @@ async def upload_episode_poster(
         raise HTTPException(status_code=404, detail="Season not found")
 
     suffix = Path(poster.filename or "").suffix or ".jpg"
-    poster_key = f"episodes/{season.serial_id}/{season.season_number}/{episode_id}_poster{suffix}"
+    poster_key = f"episodes/{season.serial_id}/{season.season_number}/{episode_id}_poster_{uuid4().hex[:8]}{suffix}"
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
         temp_file.write(await poster.read())
