@@ -27,13 +27,29 @@ class BookingService(BaseService[BookingRepository]):
             return None
 
         seat = self._resolve_seat(session, booking_data.seat_id)
+        
+        # Check if event type requires seat selection
+        # SEATED_EVENT_TYPES = {"cinema", "concerts", "stand-up", "sports"}
+        # NON_SEATING_EVENT_TYPES = {"kids", "events"}
         requires_seat = event.type in SEATED_EVENT_TYPES and bool(session.seats)
-        if requires_seat and (not seat or booking_data.seats_count != 1):
-            return None
-        if not requires_seat and booking_data.seat_id:
-            return None
+        
+        if requires_seat:
+            if not seat:
+                return None
+            if booking_data.seats_count != 1:
+                # Seated events usually book one seat at a time in this flow, 
+                # or seats_count should match exactly 1 if seat_id is provided.
+                return None
+        else:
+            # For non-seated events (kids, events), seat_id should not be provided
+            if booking_data.seat_id:
+                return None
+            
         if seat and not seat.is_available:
             return None
+            
+        # For non-seated events, we check against event.available_seats
+        # For seated events, available_seats also tracks total capacity
         if (event.available_seats or 0) < booking_data.seats_count:
             return None
 
